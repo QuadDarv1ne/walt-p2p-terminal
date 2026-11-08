@@ -1,4 +1,8 @@
 "use client";
+/**
+ * © 2026 Дуплей Максим Игоревич (maestro7it, quadd4rv1n7).
+ * Код является интеллектуальной собственностью автора. Лицензия CC BY-SA 4.0.
+ */
 
 import { useState } from "react";
 import { ArrowDownCircle, ArrowUpCircle, Plus } from "lucide-react";

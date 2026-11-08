@@ -22,6 +22,10 @@ export function Footer() {
           Документация P2P API
         </a>
       </div>
+      <div className="mx-auto w-full max-w-7xl px-4 pb-4 text-[11px] text-muted-foreground sm:px-6">
+        © 2026 Дуплей Максим Игоревич (maestro7it, quadd4rv1n7). Код является
+        интеллектуальной собственностью автора. Лицензия CC BY-SA 4.0.
+      </div>
     </footer>
   );
 }

@@ -2,6 +2,12 @@
   "name": "walt-p2p-terminal",
   "version": "1.0.0",
   "private": true,
+  "description": "Децентрализованный терминал для мониторинга P2P-рынка Walt.io. Интеллектуальная собственность Дуплей Максима Игоревича (maestro7it, quadd4rv1n7).",
+  "author": {
+    "name": "Дуплей Максим Игоревич",
+    "nickname": "maestro7it, quadd4rv1n7"
+  },
+  "license": "CC-BY-SA-4.0",
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",

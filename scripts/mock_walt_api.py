@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+© 2026 Дуплей Максим Игоревич (maestro7it, quadd4rv1n7).
+Код является интеллектуальной собственностью автора. Лицензия CC BY-SA 4.0.
+
 Mock Walt P2P API для E2E-тестов терминала.
 Имитирует https://p2p.walletbot.me/p2p/integration-api/v1/item/online
 и отдаёт CORS-заголовки, чтобы браузер обращался к нему как к CORS-прокси.

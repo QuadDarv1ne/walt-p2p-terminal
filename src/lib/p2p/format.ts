@@ -1,3 +1,7 @@
+/**
+ * © 2026 Дуплей Максим Игоревич (maestro7it, quadd4rv1n7).
+ * Код является интеллектуальной собственностью автора. Лицензия CC BY-SA 4.0.
+ */
 export function formatMoney(value: number | null | undefined, maxFrac = 2, minFrac = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
   const max = Math.max(0, Math.min(Math.round(maxFrac), 20));

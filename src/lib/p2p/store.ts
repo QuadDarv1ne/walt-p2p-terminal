@@ -1,3 +1,7 @@
+/**
+ * © 2026 Дуплей Максим Игоревич (maestro7it, quadd4rv1n7).
+ * Код является интеллектуальной собственностью автора. Лицензия CC BY-SA 4.0.
+ */
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { appendHistoryPoint, pruneHistory } from "./history";

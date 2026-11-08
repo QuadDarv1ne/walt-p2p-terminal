@@ -18,8 +18,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Walt P2P Терминал — децентрализованный мониторинг курсов",
   description:
-    "Инструмент для работы с P2P API Walt: лучшие курсы, спред, матрица рынков, избранное, алерты, калькулятор сделки и P2P-сеть между браузерами через WebRTC. Работает офлайн.",
+    "Инструмент для работы с P2P API Walt: лучшие курсы, спред, матрица рынков, избранное, алерты, калькулятор сделки и P2P-сеть между браузерами через WebRTC. Работает офлайн. © Дуплей Максим Игоревич (maestro7it, quadd4rv1n7).",
   keywords: ["P2P", "Walt", "P2P API", "курсы", "USDT", "мониторинг", "трейдинг", "WebRTC", "PWA"],
+  authors: [{ name: "Дуплей Максим Игоревич" }],
+  creator: "Дуплей Максим Игоревич (maestro7it, quadd4rv1n7)",
+  publisher: "Дуплей Максим Игоревич",
   manifest: "/manifest.webmanifest",
   applicationName: "Walt P2P Терминал",
   icons: {
