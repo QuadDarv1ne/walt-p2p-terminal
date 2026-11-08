@@ -9,6 +9,7 @@ import { Info, Settings2, TriangleAlert, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/p2p/header";
+import { ForecastPanel } from "@/components/p2p/forecast-panel";
 import { MarketFilters } from "@/components/p2p/market-filters";
 import { MonitorPanel } from "@/components/p2p/monitor-panel";
 import { OrdersTable } from "@/components/p2p/orders-table";
@@ -142,6 +143,8 @@ export default function Page() {
           selectedCrypto={data.crypto}
           onRefresh={data.refreshMatrix}
         />
+
+        <ForecastPanel />
 
         <PeerNetworkCard />
       </main>

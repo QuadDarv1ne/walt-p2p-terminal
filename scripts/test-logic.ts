@@ -15,6 +15,16 @@ import {
   pruneHistory,
 } from "../src/lib/p2p/history";
 import { CRYPTOS, FIATS, FIAT_LABEL, pairKey } from "../src/lib/p2p/types";
+import {
+  MIN_POINTS_FOR_FORECAST,
+  backtestMape,
+  fitTrend,
+  forecastInterval,
+  forecastValue,
+  trendDirection,
+  trendPerHour,
+  volatilityPerStep,
+} from "../src/lib/p2p/forecast";
 import type { AdQuery, HistoryPoint, P2PAd } from "../src/lib/p2p/types";
 
 let passed = 0;
@@ -282,6 +292,82 @@ T("proxy: пробелы по краям обрезаются",
   `https://p.example/?url=${encodeURIComponent(P2P_API_URL)}`);
 T("proxy: в коде URL нет небезопасных для query символов",
   !buildRequestUrl("https://p.example/?url={url}").slice("https://p.example/?url=".length).includes("?"));
+
+/* ── прогноз: линейный тренд, интервал, качество ── */
+const F0 = 1_700_000_000_000;
+// синтетика: ровно линейный рост 100 → 107 с шагом 30 с (шаг 1 в нормированной оси)
+const linear = Array.from({ length: 8 }, (_, i) => ({ t: F0 + i * 30_000, best: 100 + i }));
+const linearFit = fitTrend(linear);
+T("forecast: мало точек → null", fitTrend(linear.slice(0, MIN_POINTS_FOR_FORECAST - 1)) === null);
+T("forecast: ровно минимум точек → прямая есть", linearFit !== null);
+T("forecast: наклон = 1 за шаг", near(linearFit!.slope, 1, 1e-9));
+T("forecast: прямая совпадает с данными (R²=1)", near(linearFit!.r2 as number, 1, 1e-9));
+T("forecast: значение в последней точке = 107", near(linearFit!.valueAtLast, 107, 1e-9));
+T("forecast: шаг = 30 с", linearFit!.stepMs === 30_000);
+T("forecast: прогноз продолжает прямую", near(forecastValue(linearFit!, 2), 109, 1e-9));
+T("forecast: тренд вверх значим", trendDirection(linearFit!) === "up");
+T("forecast: рост за час = 120 шагов", near(trendPerHour(linearFit!) as number, (120 / 107) * 100, 1e-6));
+
+// падение
+const falling = Array.from({ length: 10 }, (_, i) => ({ t: F0 + i * 30_000, best: 200 - i * 2 }));
+T("forecast: тренд вниз", trendDirection(fitTrend(falling)!) === "down");
+T("forecast: падение за час отрицательно", (trendPerHour(fitTrend(falling)!) as number) < 0);
+
+// ровный ряд: наклон нулевой, но R² не определён (объяснять нечего)
+const flat = Array.from({ length: 9 }, (_, i) => ({ t: F0 + i * 30_000, best: 50 }));
+const flatFit = fitTrend(flat)!;
+T("forecast: ровный ряд → наклон 0", near(flatFit.slope, 0, 1e-12));
+T("forecast: ровный ряд → R² null", flatFit.r2 === null);
+T("forecast: ровный ряд → тренд flat", trendDirection(flatFit) === "flat");
+T("forecast: ровный ряд → 0% в час", near(trendPerHour(flatFit) as number, 0, 1e-12));
+
+// шум без тренда: наклон не должен объявляться значимым
+const noise = [
+  100, 103, 99, 104, 98, 102, 99, 103, 98, 101, 100, 102,
+].map((best, i) => ({ t: F0 + i * 30_000, best }));
+T("forecast: шум без тренда → flat (наклон незначим)", trendDirection(fitTrend(noise)!) === "flat");
+
+// порядок точек не важен: после перезагрузки вкладки стор мог отдать вперемешку
+const shuffled = [linear[3], linear[0], linear[7], linear[1], linear[5], linear[2], linear[6], linear[4]];
+const shuffledFit = fitTrend(shuffled)!;
+T("forecast: неотсортированный вход даёт тот же наклон", near(shuffledFit.slope, 1, 1e-9));
+T("forecast: вход не мутируется", shuffled[0].best === 103);
+
+// вырожденные случаи
+T("forecast: пустой массив → null", fitTrend([]) === null);
+T("forecast: одинаковая метка времени → null",
+  fitTrend(Array.from({ length: 10 }, () => ({ t: F0, best: 100 }))) === null);
+T("forecast: NaN в цене отфильтровывается",
+  fitTrend([...linear, { t: F0 + 999_000, best: NaN }])?.n === 8);
+
+// интервал: растёт с горизонтом и накрывает точечный прогноз
+const iv1 = forecastInterval(linearFit!, 1);
+const iv10 = forecastInterval(linearFit!, 10);
+T("forecast: интервал накрывает точечный прогноз",
+  iv1.low <= forecastValue(linearFit!, 1) && forecastValue(linearFit!, 1) <= iv1.high);
+// на идеальной прямой остатки нулевые, поэтому интервал вырожден — расширение
+// проверяем на шумном ряду, где неопределённость реально существует
+const noiseFit = fitTrend(noise)!;
+const nv1 = forecastInterval(noiseFit, 1);
+const nv10 = forecastInterval(noiseFit, 10);
+T("forecast: интервал расширяется с горизонтом",
+  (nv10.high - nv10.low) > (nv1.high - nv1.low));
+T("forecast: на идеальной прямой ширина интервала нулевая",
+  near(iv1.high - iv1.low, 0, 1e-9));
+
+// волатильность
+T("forecast: волатильность ровного ряда = 0", near(volatilityPerStep(flat) as number, 0, 1e-12));
+T("forecast: волатильность растёт с разбросом",
+  (volatilityPerStep(noise) as number) > (volatilityPerStep(flat) as number));
+T("forecast: волатильность: мало точек → null", volatilityPerStep([{ t: F0, best: 1 }]) === null);
+
+// backtest: на линейном ряде ошибка нулевая, на шумном — заметная
+T("forecast: backtest на прямой → 0%", near(backtestMape(linear) as number, 0, 1e-9));
+T("forecast: backtest на шуме → ошибка больше нуля", (backtestMape(noise) as number) > 0);
+T("forecast: backtest: мало точек → null", backtestMape(linear.slice(0, 5)) === null);
+// MAPE считается по тестовой части, а не по всей истории
+T("forecast: backtest не подгоняется под тест (ошибка на тренде больше нуля)",
+  (backtestMape(noise.map((p, i) => ({ ...p, best: p.best * (1 + (i % 3) * 0.02) }))) as number) > 0);
 
 console.log(`\nИТОГО: PASS ${passed} / FAIL ${failed}`);
 if (failures.length) {
