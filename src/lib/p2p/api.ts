@@ -9,6 +9,9 @@ import {
 
 export const P2P_API_URL = "https://p2p.walt.io/p2p/integration-api/v1/item/online";
 
+/** адрес локального CORS-релея по умолчанию (scripts/relay-proxy.ts) */
+export const DEFAULT_RELAY_URL = "http://localhost:8765/";
+
 const DEMO_TOTAL_BASE = 96;
 
 /* ------------------------------------------------------------------ */

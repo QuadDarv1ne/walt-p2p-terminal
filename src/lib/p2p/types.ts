@@ -20,7 +20,7 @@ export interface AdQuery {
   pageSize: number;
 }
 
-export type DataSource = "direct" | "proxy" | "demo";
+export type DataSource = "direct" | "proxy" | "relay" | "demo";
 
 export interface FetchResult {
   ads: P2PAd[];
@@ -72,7 +72,7 @@ export interface HistoryPoint {
   best: number;
 }
 
-export type ConnMode = "demo" | "direct" | "proxy";
+export type ConnMode = "demo" | "direct" | "proxy" | "relay";
 
 /* ------------------------------------------------------------------ */
 /* Децентрализованная P2P-сеть (WebRTC между браузерами)               */
