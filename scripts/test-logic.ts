@@ -2,7 +2,7 @@
  * Автотесты чистой логики Walt P2P Терминала (пользовательские сценарии).
  * Запуск: bun scripts/test-logic.ts
  */
-import { bestPrice, demoAds, demoMidPrice, normalizeAd } from "../src/lib/p2p/api";
+import { bestPrice, demoAds, demoMidPrice, normalizeAd, buildRequestUrl, P2P_API_URL } from "../src/lib/p2p/api";
 import { filterAds, fitsAmount, parseAmount, sanitizeCode, sortAds, uniquePayments } from "../src/lib/p2p/filters";
 import { formatMoney, formatPercent, formatPrice } from "../src/lib/p2p/format";
 import { pairKey } from "../src/lib/p2p/types";
@@ -158,6 +158,29 @@ T(
   "конвейер: лучший SELL = min",
   bestPrice(onlineFiltered, "SELL") === Math.min(...onlineFiltered.map((a) => a.price)),
 );
+
+/* ── построение URL через прокси/релей ── */
+T("proxy: пусто → прямой URL API", buildRequestUrl("") === P2P_API_URL);
+T("proxy: undefined → прямой URL API", buildRequestUrl(undefined) === P2P_API_URL);
+T("proxy: шаблон {url} подставляется кодированным",
+  buildRequestUrl("https://p.example/?url={url}") ===
+  `https://p.example/?url=${encodeURIComponent(P2P_API_URL)}`);
+T("proxy: хвост '=' → целевой URL кодируется",
+  buildRequestUrl("https://p.example/?target=") ===
+  `https://p.example/?target=${encodeURIComponent(P2P_API_URL)}`);
+T("proxy: хвост '?' → целевой URL кодируется",
+  buildRequestUrl("https://p.example/?") ===
+  `https://p.example/?${encodeURIComponent(P2P_API_URL)}`);
+T("proxy: хвост '&' → целевой URL кодируется (не ломает query)",
+  buildRequestUrl("https://p.example/?a=1&") ===
+  `https://p.example/?a=1&${encodeURIComponent(P2P_API_URL)}`);
+T("proxy: префикс с '/' → путь-стиль, URL без кодирования (релей)",
+  buildRequestUrl("http://localhost:8765/") === `http://localhost:8765/${P2P_API_URL}`);
+T("proxy: пробелы по краям обрезаются",
+  buildRequestUrl("  https://p.example/?url={url}  ") ===
+  `https://p.example/?url=${encodeURIComponent(P2P_API_URL)}`);
+T("proxy: в коде URL нет небезопасных для query символов",
+  !buildRequestUrl("https://p.example/?url={url}").slice("https://p.example/?url=".length).includes("?"));
 
 console.log(`\nИТОГО: PASS ${passed} / FAIL ${failed}`);
 if (failures.length) {

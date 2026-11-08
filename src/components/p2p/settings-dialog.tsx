@@ -93,26 +93,32 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [testingProxies, setTestingProxies] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // при смене режима — сбрасывать proxyText к релевантному дефолту
+  // при смене режима — предзаполнить адрес релея, если список пуст.
+  // useRef нужен чтобы сработало только при реальной смене режима,
+  // а не при каждом маунте (иначе стирает сохранённые прокси).
+  const prevModeRef = useRef<ConnMode>(settings.mode);
   useEffect(() => {
-    if (mode === "relay" && settings.proxyList.length === 0) {
+    if (prevModeRef.current === mode) return;
+    prevModeRef.current = mode;
+    if (mode === "relay" && !proxyText.trim()) {
       setProxyText(DEFAULT_RELAY_URL);
-    } else if (mode !== "relay") {
-      setProxyText("");
     }
-  }, [mode, settings.proxyList]);
+  }, [mode, proxyText]);
 
   const proxyUrls = proxyText
     .split("\n")
     .map((p) => p.trim())
     .filter(Boolean);
+  // в relay-режиме пустой список означает «используем релей по умолчанию» —
+  // проверка и тест должны ходить на тот же адрес, что и fetchAds
+  const effectiveProxyUrls = mode === "relay" && !proxyUrls.length ? [DEFAULT_RELAY_URL] : proxyUrls;
 
   const runTest = async () => {
     setTest({ kind: "running" });
     try {
       const res = await fetchAds(
         { cryptoCurrency: "USDT", fiatCurrency: "RUB", side: "SELL", page: 1, pageSize: 5 },
-        { mode, apiKey: apiKey.trim(), proxyUrls },
+        { mode, apiKey: apiKey.trim(), proxyUrls: effectiveProxyUrls },
       );
       setTest({
         kind: "ok",
@@ -129,7 +135,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   };
 
   const checkProxies = async () => {
-    if (!proxyUrls.length) {
+    if (!effectiveProxyUrls.length) {
       toast.info("Список прокси пуст");
       return;
     }
@@ -137,14 +143,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setProxyResults({});
     const results: Record<number, ProxyTestResult> = {};
     // последовательно, чтобы не устроить DDoS самому себе
-    for (let i = 0; i < proxyUrls.length; i++) {
-      const r = await testProxy(proxyUrls[i], apiKey.trim());
+    for (let i = 0; i < effectiveProxyUrls.length; i++) {
+      const r = await testProxy(effectiveProxyUrls[i], apiKey.trim());
       results[i] = { ok: r.ok, message: r.message };
       setProxyResults({ ...results });
     }
     setTestingProxies(false);
     const good = Object.values(results).filter((r) => r.ok).length;
-    if (good) toast.success(`Рабочих прокси: ${good} из ${proxyUrls.length}`);
+    if (good) toast.success(`Рабочих прокси: ${good} из ${effectiveProxyUrls.length}`);
     else toast.error("Ни один прокси не ответил");
   };
 
@@ -341,12 +347,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     Проверить прокси
                   </Button>
                   <span className="text-xs text-muted-foreground">
-                    {proxyUrls.length ? `${proxyUrls.length} в списке` : "список пуст"}
+                    {effectiveProxyUrls.length ? `${effectiveProxyUrls.length} в списке` : "список пуст"}
                   </span>
                 </div>
                 {Object.keys(proxyResults).length > 0 && (
                   <div className="space-y-1 rounded-md border border-border bg-muted/30 p-2">
-                    {proxyUrls.map((p, i) =>
+                    {effectiveProxyUrls.map((p, i) =>
                       proxyResults[i] ? (
                         <div key={i} className="num flex items-center gap-2 text-[11px]">
                           {proxyResults[i].ok ? (

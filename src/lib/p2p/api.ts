@@ -20,7 +20,7 @@ const DEMO_TOTAL_BASE = 96;
 
 const PROXY_TIMEOUT_MS = 10_000;
 
-function buildRequestUrl(proxyUrl?: string): string {
+export function buildRequestUrl(proxyUrl?: string): string {
   const proxy = (proxyUrl ?? "").trim();
   if (!proxy) return P2P_API_URL;
   if (proxy.includes("{url}")) {
