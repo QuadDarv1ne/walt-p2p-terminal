@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Mock Walt P2P API для E2E-тестов терминала.
-Имитирует https://p2p.walt.io/p2p/integration-api/v1/item/online
+Имитирует https://p2p.walletbot.me/p2p/integration-api/v1/item/online
 и отдаёт CORS-заголовки, чтобы браузер обращался к нему как к CORS-прокси.
 
 Запуск: python3 scripts/mock_walt_api.py [порт]

@@ -9,32 +9,48 @@
  *
  * Что делает релей:
  *   1. Принимает запросы от терминала (fetch с localhost).
- *   2. Ходит к p2p.walt.io — напрямую или через upstream-прокси.
+ *   2. Ходит к p2p.walletbot.me — напрямую или через upstream-прокси.
  *   3. Отдаёт ответ браузеру с CORS-заголовками.
  *
  * Запуск:
  *   bun scripts/relay-proxy.ts                 — порт 8765
  *   PORT=9000 bun scripts/relay-proxy.ts        — порт 9000
  *
- * В настройках терминала → «Реальный API — через прокси» укажите:
+ * В настройках терминала → «Реальный API — через локальный релей» укажите:
  *   http://localhost:8765/
  *
- * Upstream-прокси (обязателен, если walt.io блокируется на сетевом уровне):
+ * Upstream-прокси (нужен, только если API блокируется на сетевом уровне):
  *   PROXY=socks5://127.0.0.1:1080 bun scripts/relay-proxy.ts
  *   PROXY=http://user:pass@host:8080 bun scripts/relay-proxy.ts
  * Также читаются стандартные https_proxy / http_proxy.
  *
+ * API-ключ (необязательно):
+ *   P2P_API_KEY=... — релей подставит его в X-API-Key, если браузер ключ не прислал.
+ *   Имя без префикса NEXT_PUBLIC_ принципиально: иначе Next.js вкомпилирует ключ
+ *   в клиентский бандл и он станет публичным.
+ *
  * ВАЖНО: MTProto-прокси (t.me/proxy) здесь НЕ подходит — это не HTTP/SOCKS-прокси.
- * Чтобы использовать его, поднимите локальный HTTP/SOCKS-выход через клиент
- * (например, mihomo/Clash), а в PROXY укажите уже его localhost-адрес.
+ * Проверено на TgWsProxy: порт открывается, но ни SOCKS5-greeting, ни MTProto-
+ * хендшейк не получают ответа, а `curl --socks5` возвращает http=000.
+ * Чтобы использовать такой прокси, поднимите локальный HTTP/SOCKS-выход через
+ * клиент (например, mihomo/Clash) и укажите в PROXY уже его адрес.
  */
 
-// Bun сам подхватывает .env из корня проекта — адрес API можно задать там
+// Bun сам подхватывает .env из корня проекта — адрес API можно задать там.
+// Внимание: в официальной документации Walt до сих пор указан p2p.walt.io, но
+// этот хост не резолвится (NXDOMAIN). Рабочий адрес — p2p.walletbot.me.
 const TARGET =
   process.env.NEXT_PUBLIC_P2P_API_URL?.trim() ||
-  "https://p2p.walt.io/p2p/integration-api/v1/item/online";
+  "https://p2p.walletbot.me/p2p/integration-api/v1/item/online";
 const PORT = Number(process.env.PORT) || 8765;
 const UPSTREAM = process.env.PROXY || process.env.https_proxy || process.env.http_proxy || "";
+
+/**
+ * Ключ API живёт только на сервере: переменная без префикса NEXT_PUBLIC_ не
+ * попадает в клиентский бандл. Если браузер не прислал X-API-Key, релей
+ * подставляет ключ из .env — так он не покидает локальную машину.
+ */
+const SERVER_API_KEY = process.env.P2P_API_KEY?.trim() || "";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -58,7 +74,14 @@ const server = Bun.serve({
     const path = new URL(req.url).pathname;
     if (path === "/health") {
       return Response.json(
-        { status: "ok", upstream: UPSTREAM || "none", target: TARGET, ts: Date.now() },
+        {
+          status: "ok",
+          upstream: UPSTREAM || "none",
+          target: TARGET,
+          // только факт наличия ключа — значение наружу не отдаём
+          apiKey: SERVER_API_KEY ? "set" : "missing",
+          ts: Date.now(),
+        },
         { headers: allow },
       );
     }
@@ -69,7 +92,8 @@ const server = Bun.serve({
       "Content-Type": "application/json",
       accept: "application/json",
     };
-    const key = req.headers.get("x-api-key");
+    // ключ из запроса имеет приоритет; иначе берём серверный из .env
+    const key = req.headers.get("x-api-key")?.trim() || SERVER_API_KEY;
     if (key) headers["X-API-Key"] = key;
 
     try {
@@ -101,6 +125,7 @@ const server = Bun.serve({
 
 console.log(`\n[relay] CORS-релей запущен на http://localhost:${server.port}`);
 console.log(`[relay] upstream-прокси: ${UPSTREAM || "нет (прямое подключение)"}`);
+console.log(`[relay] API-ключ из .env (P2P_API_KEY): ${SERVER_API_KEY ? "найден" : "не задан"}`);
 console.log(`[relay] Добавьте в настройки терминала (режим «через прокси»):`);
 console.log(`          http://localhost:${server.port}/`);
 console.log(`[relay] Проверка: http://localhost:${server.port}/health`);

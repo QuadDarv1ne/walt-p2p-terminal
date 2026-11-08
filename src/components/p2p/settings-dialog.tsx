@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   BookOpen,
   CheckCircle2,
@@ -93,17 +93,15 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [testingProxies, setTestingProxies] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // при смене режима — предзаполнить адрес релея, если список пуст.
-  // useRef нужен чтобы сработало только при реальной смене режима,
-  // а не при каждом маунте (иначе стирает сохранённые прокси).
-  const prevModeRef = useRef<ConnMode>(settings.mode);
-  useEffect(() => {
-    if (prevModeRef.current === mode) return;
-    prevModeRef.current = mode;
-    if (mode === "relay" && !proxyText.trim()) {
+  // при переключении на релей — предзаполнить адрес по умолчанию, если список пуст.
+  // Это реакция на действие пользователя, а не синхронизация с внешней системой,
+  // поэтому подстановка живёт в обработчике, а не в эффекте.
+  const changeMode = (next: ConnMode) => {
+    setMode(next);
+    if (next === "relay" && !proxyText.trim()) {
       setProxyText(DEFAULT_RELAY_URL);
     }
-  }, [mode, proxyText]);
+  };
 
   const proxyUrls = proxyText
     .split("\n")
@@ -255,7 +253,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         <div className="space-y-5 py-1">
           <div className="space-y-2">
             <Label>Режим данных</Label>
-            <Select value={mode} onValueChange={(v) => setMode(v as ConnMode)}>
+            <Select value={mode} onValueChange={(v) => changeMode(v as ConnMode)}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -268,7 +266,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </Select>
             <p className="text-xs text-muted-foreground">
               Демо-режим показывает симуляцию рынка. Реальный режим обращается к
-              p2p.walt.io прямо из вашего браузера.
+              p2p.walletbot.me прямо из вашего браузера.
             </p>
           </div>
 
@@ -383,7 +381,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     Ссылки вида <code>t.me/proxy?server=...&amp;secret=...</code> — это
                     <strong> MTProto-прокси для мессенджера Telegram</strong>. Они переносят
                     только зашифрованный трафик Telegram API и <strong>не могут
-                    использоваться для HTTP-запросов</strong> к p2p.walt.io.
+                    использоваться для HTTP-запросов</strong> к API Walt. Проверено на
+                    TgWsProxy: порт открывается, но прокси не отвечает ни на SOCKS5-приветствие,
+                    ни на MTProto-хендшейк.
                   </p>
                   <p>
                     Для обхода блокировок используйте:
@@ -391,13 +391,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   <ul className="list-disc space-y-1 pl-4">
                     <li>
                       <strong>Локальный релей</strong> — «через локальный релей» в режиме данных +
-                      <code> bun scripts/relay-proxy.ts</code>. Релей ходит в интернет через
-                      системный прокси/VPN.
+                      <code> bun scripts/relay-proxy.ts</code>. Релей ходит в интернет
+                      напрямую или через upstream-прокси (переменная <code>PROXY</code>).
                     </li>
                     <li>
-                      <strong>MTProto-прокси для сайта</strong> — поднимите локальный HTTP/SOCKS-выход
-                      через <code>mihomo</code> (Clash Meta) или <code>Xray</code>, укажите его
-                      <code>PROXY=socks5://127.0.0.1:1080</code> при запуске релея.
+                      <strong>HTTP/SOCKS5-выход</strong> — поднимите локальный прокси-клиент
+                      (<code>mihomo</code>, <code>Xray</code>, Clash) и укажите его
+                      <code> PROXY=socks5://127.0.0.1:1080</code> при запуске релея.
                     </li>
                     <li>
                       <strong>Публичные CORS-прокси</strong> — добавьте URL в режиме «через прокси».

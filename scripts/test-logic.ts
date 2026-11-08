@@ -2,11 +2,17 @@
  * Автотесты чистой логики Walt P2P Терминала (пользовательские сценарии).
  * Запуск: bun scripts/test-logic.ts
  */
-import { bestPrice, demoAds, demoMidPrice, normalizeAd, buildRequestUrl, P2P_API_URL } from "../src/lib/p2p/api";
-import { filterAds, fitsAmount, parseAmount, sanitizeCode, sortAds, uniquePayments } from "../src/lib/p2p/filters";
+import { bestPrice, demoAds, demoMidPrice, normalizeAd, buildRequestUrl, P2P_API_URL, describeApiError } from "../src/lib/p2p/api";
+import { filterAds, fitsAmount, parseAmount, sanitizeCode, sortAds, uniquePayments, bestAd } from "../src/lib/p2p/filters";
 import { formatMoney, formatPercent, formatPrice } from "../src/lib/p2p/format";
-import { pairKey } from "../src/lib/p2p/types";
-import type { P2PAd } from "../src/lib/p2p/types";
+import {
+  HISTORY_LIMIT,
+  MAX_HISTORY_PAIRS,
+  appendHistoryPoint,
+  pruneHistory,
+} from "../src/lib/p2p/history";
+import { CRYPTOS, FIATS, FIAT_LABEL, pairKey } from "../src/lib/p2p/types";
+import type { AdQuery, HistoryPoint, P2PAd } from "../src/lib/p2p/types";
 
 let passed = 0;
 let failed = 0;
@@ -107,6 +113,17 @@ T("фильтр: оплата «Т-Банк» — 1", filterAds(F, { ...base, pa
 T("фильтр: оплата + сумма — пересечение условий", filterAds(F, { ...base, amount: 60000, payments: ["Сбербанк"] }).length === 1);
 T("фильтр: поиск по нику", filterAds(F, { ...base, search: "НИК" }).length === 0);
 
+/* ── объявление с лучшим курсом (подсветка строки в таблице) ── */
+T("bestAd SELL: минимальная цена", bestAd(sellAds, "SELL")?.price === 93.7);
+T("bestAd BUY: максимальная цена", bestAd(sellAds, "BUY")?.price === 99);
+T("bestAd: пустой список → null", bestAd([], "SELL") === null);
+// регресс: мусорная цена ≤ 0 в начале списка не должна «съедать» подсветку
+const dirty = [ad({ id: "zero", price: 0 }), ad({ id: "neg", price: -3 }), ad({ id: "ok", price: 91 })];
+T("bestAd: цена ≤ 0 не побеждает валидную", bestAd(dirty, "SELL")?.id === "ok");
+T("bestAd: только мусор → null", bestAd([ad({ price: 0 }), ad({ price: -1 })], "SELL") === null);
+T("bestAd: NaN игнорируется", bestAd([ad({ id: "nan", price: NaN }), ad({ id: "ok", price: 5 })], "SELL")?.id === "ok");
+T("bestAd: согласован с bestPrice", bestAd(sellAds, "SELL")?.price === bestPrice(sellAds, "SELL"));
+
 /* ── сортировка ── */
 const S = [ad({ id: "a", price: 10 }), ad({ id: "b", price: 2 }), ad({ id: "c", price: 0 }), ad({ id: "d", price: 1 })];
 T("сортировка asc числовая (1,2,10), 0 в конце", eq(sortAds(S, "price", "asc").map((a) => a.price), [1, 2, 10, 0]));
@@ -123,11 +140,67 @@ T("sanitizeCode: длиннее 10 → null", sanitizeCode("ABCDEFGHIJKL") === n
 T("sanitizeCode: пусто → null", sanitizeCode("") === null);
 T("sanitizeCode: пробелы не мешают", sanitizeCode(" US DT ") === "USDT");
 
+/* ── история курсов: защита от дублей и рост localStorage ── */
+const T0 = 1_700_000_000_000;
+let h1 = appendHistoryPoint(undefined, 90, T0);
+T("history: первая точка пишется", h1.length === 1 && h1[0].best === 90);
+h1 = appendHistoryPoint(h1, 91, T0 + 1000);
+T("history: точка в окне 5 с игнорируется", h1.length === 1);
+h1 = appendHistoryPoint(h1, 91, T0 + 5001);
+T("history: после окна точка пишется", h1.length === 2 && h1[1].best === 91);
+T("history: вход не мутируется", h1[0].best === 90);
+
+let long = appendHistoryPoint(undefined, 1, T0);
+for (let i = 1; i <= HISTORY_LIMIT + 40; i++) long = appendHistoryPoint(long, i, T0 + i * 10_000);
+T("history: ряд ограничен HISTORY_LIMIT", long.length === HISTORY_LIMIT);
+T("history: хранятся последние точки", long[long.length - 1].best === HISTORY_LIMIT + 40);
+
+// регресс: пары можно открывать бесконечно — история не должна расти без предела
+let many: Record<string, HistoryPoint[]> = {};
+for (let i = 0; i < MAX_HISTORY_PAIRS + 6; i++) {
+  many = pruneHistory({ ...many, [`C${i}-RUB-SELL`]: [{ t: T0 + i, best: i }] });
+}
+T("history: число пар ограничено", Object.keys(many).length === MAX_HISTORY_PAIRS);
+T("history: вытесняются самые старые пары", !("C0-RUB-SELL" in many) && !("C5-RUB-SELL" in many));
+T("history: свежие пары остаются", `C${MAX_HISTORY_PAIRS + 5}-RUB-SELL` in many);
+const few = { "A-RUB-SELL": [{ t: T0, best: 1 }] };
+T("history: до лимита объект не копируется", pruneHistory(few) === few);
+
 /* ── форматирование ── */
 T("formatPrice: null → тире", formatPrice(null) === "—");
 T("formatMoney: 15000 → 15\u00A0000,00", formatMoney(15000) === "15\u00A0000,00");
 T("formatPercent: дробная запятая", formatPercent(12.5, 1) === "12,5%");
 T("pairKey собирает ключ", pairKey("USDT", "RUB", "SELL") === "USDT-RUB-SELL");
+
+/* ── списки валют: только то, что принимает боевой API ── */
+// регресс: USDC/BNB и AED стояли в списках, но API отвечает на них 400
+// CRYPTO/FIAT_CURRENCY_NOT_SUPPORTED — матрица рынков висела на скелетонах
+T("CRYPTOS: не содержит USDC", !(CRYPTOS as readonly string[]).includes("USDC"));
+T("CRYPTOS: не содержит BNB", !(CRYPTOS as readonly string[]).includes("BNB"));
+T("FIATS: не содержит AED", !(FIATS as readonly string[]).includes("AED"));
+T("CRYPTOS: содержит проверенные USDT/BTC/ETH/TON/NOT",
+  ["USDT", "BTC", "ETH", "TON", "NOT"].every((c) => (CRYPTOS as readonly string[]).includes(c)));
+T("FIATS: содержит проверенные RUB/USD/EUR/KZT/UAH/TRY",
+  ["RUB", "USD", "EUR", "KZT", "UAH", "TRY"].every((f) => (FIATS as readonly string[]).includes(f)));
+T("FIAT_LABEL: подпись есть для каждого фиата",
+  FIATS.every((f) => typeof FIAT_LABEL[f] === "string" && FIAT_LABEL[f].length > 0));
+
+/* ── разбор ошибок API (HTTP 400 с errorCode) ── */
+const q = (cryptoCurrency: string, fiatCurrency: string): AdQuery => ({
+  cryptoCurrency, fiatCurrency, side: "SELL", page: 1, pageSize: 50,
+});
+const eCrypto = describeApiError(
+  { errorCode: "CRYPTO_CURRENCY_NOT_SUPPORTED", errorMessage: "crypto currency BNB is not supported." },
+  q("BNB", "RUB"),
+);
+T("describeApiError: крипта → понятное сообщение", eCrypto?.message.includes("BNB") === true);
+T("describeApiError: крипта → подсказка про пару", eCrypto?.hint?.includes("BNB/RUB") === true);
+const eFiat = describeApiError({ errorCode: "FIAT_CURRENCY_NOT_SUPPORTED" }, q("USDT", "AED"));
+T("describeApiError: фиат → понятное сообщение", eFiat?.message.includes("AED") === true);
+T("describeApiError: неизвестный код → текст из API",
+  describeApiError({ errorCode: "WEIRD", errorMessage: "something odd" }, q("USDT", "RUB"))?.message.includes("something odd") === true);
+T("describeApiError: пустой ответ → null", describeApiError(null, q("USDT", "RUB")) === null);
+T("describeApiError: без errorCode → null", describeApiError({ errorMessage: "x" }, q("USDT", "RUB")) === null);
 
 /* ── демо-генератор ── */
 const d1 = demoAds({ cryptoCurrency: "USDT", fiatCurrency: "RUB", side: "SELL", page: 1, pageSize: 50 });

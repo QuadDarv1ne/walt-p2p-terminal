@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { appendHistoryPoint, pruneHistory } from "./history";
 import {
   AlertRule,
   AlertOp,
@@ -11,7 +12,6 @@ import {
   pairKey,
 } from "./types";
 
-const HISTORY_LIMIT = 240;
 const MAX_WATCH = 8;
 const MAX_ALERTS = 12;
 
@@ -129,12 +129,10 @@ export const useP2PStore = create<P2PState>()(
         if (!Number.isFinite(best) || best <= 0) return;
         const key = pairKey(crypto, fiat, side);
         set((s) => {
-          const series = s.history[key] ?? [];
-          const last = series[series.length - 1];
-          if (last && Date.now() - last.t < 5000) return s; // защита от дублей
-          const point: HistoryPoint = { t: Date.now(), best };
-          const next = [...series, point].slice(-HISTORY_LIMIT);
-          return { history: { ...s.history, [key]: next } };
+          const next = appendHistoryPoint(s.history[key], best, Date.now());
+          if (next === s.history[key]) return s; // дубль в окне защиты — не пишем
+          // вытесняем давно не открывавшиеся пары, иначе localStorage переполнится
+          return { history: pruneHistory({ ...s.history, [key]: next }) };
         });
       },
 

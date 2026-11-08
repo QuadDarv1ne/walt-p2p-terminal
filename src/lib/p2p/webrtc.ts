@@ -120,6 +120,8 @@ type WireMessage =
 
 export interface RemoteQuote extends PeerQuote {
   from: string;
+  /** id соединения — по нему данные пира удаляются при отключении */
+  peerId: string;
   receivedAt: number;
 }
 
@@ -408,6 +410,26 @@ class PeerNetwork {
     }
     this.peers.delete(conn.id);
     this.pending.delete(conn.id);
+    this.dropPeerData(conn.id);
+  }
+
+  /**
+   * Удаляет данные отключившегося пира.
+   *
+   * Без этого его курсы и списки навсегда оставались в интерфейсе: пользователь
+   * видел «живые» котировки от собеседника, который давно ушёл из сети, и не мог
+   * понять, что цифры устарели.
+   */
+  private dropPeerData(peerId: string): void {
+    let changed = false;
+    for (const [key, q] of Object.entries(this.quotes)) {
+      if (q.peerId === peerId) {
+        delete this.quotes[key];
+        changed = true;
+      }
+    }
+    if (this.incoming.delete(peerId)) changed = true;
+    if (changed) this.notify();
   }
 
   private send(conn: PeerConn, msg: WireMessage): void {
@@ -462,7 +484,7 @@ class PeerNetwork {
           const prev = this.quotes[key];
           // берём самое свежее
           if (!prev || at >= prev.receivedAt) {
-            this.quotes[key] = { ...q, from: conn.name, receivedAt: at };
+            this.quotes[key] = { ...q, from: conn.name, peerId: conn.id, receivedAt: at };
           }
         }
         this.incoming.set(conn.id, {

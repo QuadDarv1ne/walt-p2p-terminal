@@ -10,9 +10,8 @@ const isExport = process.env.NEXT_OUTPUT === "export";
 const nextConfig: NextConfig = {
   output: isExport ? "export" : "standalone",
   images: { unoptimized: true },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  // проверка типов при сборке включена: ошибки типов должны ломать билд,
+  // а не попадать в артефакт (см. npm run build)
   reactStrictMode: false,
 };
 

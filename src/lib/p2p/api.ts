@@ -10,10 +10,15 @@ import {
 /**
  * Адрес API берётся из .env (NEXT_PUBLIC_* Next.js подставляет в клиентский бандл
  * на этапе сборки), поэтому значение нужно задавать до `next build`.
+ *
+ * Историческая путаница: в официальной документации Walt до сих пор указан
+ * `p2p.walt.io`, но этот хост больше не резолвится в DNS (NXDOMAIN) и запросы к
+ * нему падают. Рабочий адрес — `p2p.walletbot.me` (проверено: отвечает HTTP 401
+ * без ключа и HTTP 200 с ключом).
  */
 export const P2P_API_URL =
   process.env.NEXT_PUBLIC_P2P_API_URL?.trim() ||
-  "https://p2p.walt.io/p2p/integration-api/v1/item/online";
+  "https://p2p.walletbot.me/p2p/integration-api/v1/item/online";
 
 /** адрес локального CORS-релея по умолчанию (scripts/relay-proxy.ts) */
 export const DEFAULT_RELAY_URL = "http://localhost:8765/";
@@ -121,6 +126,44 @@ export interface FetchOptions {
 /** последний сработавший прокси — начинаем следующую пачку запросов с него */
 let lastGoodProxy: string | null = null;
 
+/**
+ * Расшифровка ошибки Walt: API возвращает `errorCode` вида
+ * `CRYPTO_CURRENCY_NOT_SUPPORTED` / `FIAT_CURRENCY_NOT_SUPPORTED`, когда пары нет
+ * в списке поддерживаемых. Возвращает ошибку с человеческим текстом либо null,
+ * если код неизвестен (тогда покажем общий HTTP-статус).
+ */
+export function describeApiError(
+  payload: { errorCode?: unknown; errorMessage?: unknown } | null,
+  query: AdQuery,
+): P2PApiError | null {
+  const code = typeof payload?.errorCode === "string" ? payload.errorCode : "";
+  if (!code) return null;
+
+  const pair = `${query.cryptoCurrency}/${query.fiatCurrency}`;
+  if (code === "CRYPTO_CURRENCY_NOT_SUPPORTED") {
+    return new P2PApiError("http", `Walt не поддерживает криптовалюту ${query.cryptoCurrency}`, {
+      status: 400,
+      hint: `Пара ${pair} недоступна в P2P API. Выберите другую криптовалюту — список поддерживаемых в подсказке поля.`,
+    });
+  }
+  if (code === "FIAT_CURRENCY_NOT_SUPPORTED") {
+    return new P2PApiError("http", `Walt не поддерживает фиат ${query.fiatCurrency}`, {
+      status: 400,
+      hint: `Пара ${pair} недоступна в P2P API. Выберите другую фиатную валюту.`,
+    });
+  }
+  const message = typeof payload?.errorMessage === "string" ? payload.errorMessage : code;
+  return new P2PApiError("http", `P2P API отклонил запрос: ${message}`, { status: 400 });
+}
+
+async function readErrorBody(res: Response, query: AdQuery): Promise<P2PApiError | null> {
+  try {
+    return describeApiError((await res.json()) as Record<string, unknown>, query);
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchAds(query: AdQuery, opts: FetchOptions): Promise<FetchResult> {
   if (opts.mode === "demo") {
     await sleep(200 + Math.random() * 350);
@@ -141,7 +184,6 @@ export async function fetchAds(query: AdQuery, opts: FetchOptions): Promise<Fetc
       : proxies;
 
   let res: Response | null = null;
-  let lastNetError: unknown = null;
   // ошибка, которую показываем как есть (HTTP-статус цели, а не «проблема с сетью»)
   let httpAbort: P2PApiError | null = null;
 
@@ -168,7 +210,6 @@ export async function fetchAds(query: AdQuery, opts: FetchOptions): Promise<Fetc
         PROXY_TIMEOUT_MS,
       );
       if (!res.ok && (res.status >= 500 || res.status === 429)) {
-        lastNetError = new P2PApiError("http", `HTTP ${res.status}`);
         if (!viaProxyList) {
           // прямому запросу переключиться на другой прокси некуда —
           // показываем честный статус сервера вместо «проблемы CORS»
@@ -183,6 +224,7 @@ export async function fetchAds(query: AdQuery, opts: FetchOptions): Promise<Fetc
                   : "Возможен сбой на стороне API — попробуйте позже.",
             },
           );
+          res = null;
           break;
         }
         // временная ошибка прокси/цели — пробуем следующий
@@ -191,8 +233,7 @@ export async function fetchAds(query: AdQuery, opts: FetchOptions): Promise<Fetc
       }
       if (proxy) lastGoodProxy = proxy;
       break;
-    } catch (e) {
-      lastNetError = e;
+    } catch {
       res = null;
     }
   }
@@ -213,17 +254,24 @@ export async function fetchAds(query: AdQuery, opts: FetchOptions): Promise<Fetc
         { hint: "Проверьте адреса прокси в настройках — кнопка «Проверить прокси» покажет статус каждого." },
       );
     }
-    throw new P2PApiError("network", "Не удалось связаться с p2p.walt.io из браузера", {
-      hint: "Скорее всего API не отдаёт CORS-заголовки для сторонних сайтов. Попробуйте режим «через прокси» или демо-данные.",
+    throw new P2PApiError("network", "Не удалось связаться с p2p.walletbot.me из браузера", {
+      hint:
+        "API не отдаёт CORS-заголовки, поэтому прямой запрос из браузера блокируется. " +
+        "Включите режим «через локальный релей»: bun scripts/relay-proxy.ts — или используйте демо-данные.",
     });
   }
-  void lastNetError;
 
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) {
       throw new P2PApiError("auth", `Доступ запрещён (HTTP ${res.status})`, {
         hint: "Проверьте API-ключ в настройках. Ключ передаётся в заголовке X-API-Key.",
       });
+    }
+    // Walt отвечает HTTP 400 с errorCode, когда пара не поддерживается: без
+    // разбора кода пользователь видел сухое «HTTP 400» и не понимал, что делать
+    if (res.status === 400) {
+      const problem = await readErrorBody(res, query);
+      if (problem) throw problem;
     }
     throw new P2PApiError("http", `Сервер вернул ошибку HTTP ${res.status}`);
   }
@@ -260,23 +308,28 @@ export function bestPrice(ads: P2PAd[], side: Side): number | null {
 /* Демо-данные (симуляция рынка)                                       */
 /* ------------------------------------------------------------------ */
 
+/** Курсы привязаны к реальным котировкам Walt P2P (сняты с боевого API) */
 const CRYPTO_BASE_USD: Record<string, number> = {
   USDT: 1.0,
-  USDC: 0.9998,
-  BTC: 96450,
-  ETH: 2685,
-  TON: 4.85,
-  BNB: 642,
+  BTC: 91_200,
+  ETH: 2_690,
+  TON: 1.26,
+  NOT: 0.00033,
 };
 
 const FIAT_PER_USD: Record<string, number> = {
-  RUB: 96.4,
+  RUB: 85,
   USD: 1,
-  EUR: 0.925,
-  KZT: 486,
-  UAH: 41.6,
-  TRY: 34.8,
-  AED: 3.673,
+  EUR: 0.905,
+  KZT: 467,
+  UAH: 47.5,
+  TRY: 54.6,
+  CNY: 6.81,
+  PLN: 4.04,
+  GEL: 2.62,
+  AMD: 369,
+  AZN: 1.72,
+  BYN: 3.19,
 };
 
 const PAYMENTS: Record<string, string[]> = {
@@ -286,7 +339,12 @@ const PAYMENTS: Record<string, string[]> = {
   KZT: ["Kaspi Bank", "Halyk Bank", "Fortebank"],
   UAH: ["Monobank", "Privat24", "Райффайзен UA"],
   TRY: ["Ziraat Bankası", "Papara", "Garanti BBVA"],
-  AED: ["Mashreq", "ADCB", "Банковский перевод"],
+  CNY: ["Alipay", "WeChat Pay", "Банковский перевод"],
+  PLN: ["BLIK", "Revolut", "Банковский перевод"],
+  GEL: ["TBC Bank", "Bank of Georgia"],
+  AMD: ["Idram", "Ameriabank"],
+  AZN: ["Kapital Bank", "ABB"],
+  BYN: ["Альфа-Банк BY", "Беларусбанк"],
 };
 
 const NICKNAMES = [

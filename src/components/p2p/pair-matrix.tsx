@@ -12,11 +12,10 @@ import type { MatrixEntry } from "@/hooks/use-p2p-data";
 
 const CRYPTO_COLOR: Record<string, string> = {
   USDT: "#10b981",
-  USDC: "#14b8a6",
   BTC: "#f59e0b",
   ETH: "#a78bfa",
   TON: "#f43f5e",
-  BNB: "#eab308",
+  NOT: "#3b82f6",
 };
 
 interface PairMatrixProps {

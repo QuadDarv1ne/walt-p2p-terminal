@@ -44,7 +44,9 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-useless-escape": "off",
   },
 }, {
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills", "scripts/**", "download/**"]
+  // dist/** — готовый артефакт статической сборки: минифицированный код даёт
+  // сотни ложных срабатываний, линтить нужно только исходники
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "dist/**", "public/sw.js", "next-env.d.ts", "examples/**", "skills", "scripts/**", "download/**"]
 }];
 
 export default eslintConfig;

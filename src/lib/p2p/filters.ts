@@ -1,4 +1,4 @@
-import { P2PAd } from "./types";
+import { P2PAd, Side } from "./types";
 
 /**
  * Чистая логика фильтрации объявлений — пользовательские сценарии.
@@ -102,4 +102,28 @@ export function sortAds(ads: P2PAd[], key: AdSortKey, dir: "asc" | "desc"): P2PA
     if (valid(bv)) return 1;
     return 0;
   });
+}
+
+/**
+ * Объявление с лучшей ценой для указанной стороны.
+ *
+ * SELL-объявления продают криптовалюту нам — выгодна минимальная цена;
+ * BUY-объявления покупают её у нас — выгодна максимальная.
+ *
+ * Объявления с ценой ≤ 0 (мусор в ответе API) игнорируются полностью:
+ * раньше «лучшим» мог остаться первый элемент с нулевой ценой, и подсветка
+ * не появлялась ни на одной строке, хотя валидные предложения были.
+ * Возвращает null, если валидных цен нет вовсе.
+ */
+export function bestAd(ads: P2PAd[], side: Side): P2PAd | null {
+  let best: P2PAd | null = null;
+  for (const a of ads) {
+    if (!Number.isFinite(a.price) || a.price <= 0) continue;
+    if (!best) {
+      best = a;
+      continue;
+    }
+    if (side === "SELL" ? a.price < best.price : a.price > best.price) best = a;
+  }
+  return best;
 }

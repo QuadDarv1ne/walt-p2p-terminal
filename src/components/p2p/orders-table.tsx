@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { downloadCsv, formatMoney, formatPrice, timeAgo } from "@/lib/p2p/format";
-import { filterAds, parseAmount, sortAds, uniquePayments } from "@/lib/p2p/filters";
+import { filterAds, parseAmount, sortAds, uniquePayments, bestAd } from "@/lib/p2p/filters";
 import { P2PAd, Side } from "@/lib/p2p/types";
 
 interface OrdersTableProps {
@@ -111,16 +111,7 @@ export function OrdersTable({ ads, side, crypto, fiat, loading, lastUpdated, has
 
   // лучший курс по ВСЕМ полученным объявлениям — бейдж ставится только этой строке,
   // на какой бы странице она ни находилась
-  const bestAdId = useMemo(() => {
-    if (!ads.length) return null;
-    let best = ads[0];
-    for (const a of ads) {
-      if (a.price > 0 && (side === "SELL" ? a.price < best.price : a.price > best.price)) {
-        best = a;
-      }
-    }
-    return best.price > 0 ? best.id : null;
-  }, [ads, side]);
+  const bestAdId = useMemo(() => bestAd(ads, side)?.id ?? null, [ads, side]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
   const safePage = Math.min(page, totalPages);

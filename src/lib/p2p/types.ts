@@ -135,8 +135,16 @@ export interface PairQuote {
   totalCount: number;
 }
 
-export const CRYPTOS = ["USDT", "USDC", "BTC", "ETH", "TON", "BNB"] as const;
-export const FIATS = ["RUB", "USD", "EUR", "KZT", "UAH", "TRY", "AED"] as const;
+/**
+ * Валюты, которые Walt реально поддерживает в P2P API.
+ *
+ * Списки сверены с боевым API (запрос на каждую пару): неверный код даёт
+ * HTTP 400 с `errorCode: CRYPTO_CURRENCY_NOT_SUPPORTED` /
+ * `FIAT_CURRENCY_NOT_SUPPORTED`. USDC, BNB, AED и др. раньше стояли в списках,
+ * но API их не принимает — матрица рынков из-за этого вечно висела на скелетонах.
+ */
+export const CRYPTOS = ["USDT", "BTC", "ETH", "TON", "NOT"] as const;
+export const FIATS = ["RUB", "USD", "EUR", "KZT", "UAH", "TRY", "CNY", "PLN", "GEL", "AMD", "AZN", "BYN"] as const;
 
 export const FIAT_LABEL: Record<string, string> = {
   RUB: "Рубль",
@@ -145,7 +153,12 @@ export const FIAT_LABEL: Record<string, string> = {
   KZT: "Тенге",
   UAH: "Гривна",
   TRY: "Лира",
-  AED: "Дирхам",
+  CNY: "Юань",
+  PLN: "Злотый",
+  GEL: "Лари",
+  AMD: "Драм",
+  AZN: "Манат",
+  BYN: "Белорусский рубль",
 };
 
 export const SIDE_LABEL: Record<Side, string> = {

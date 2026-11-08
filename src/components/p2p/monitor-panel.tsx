@@ -37,6 +37,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatPrice, formatTime, timeAgo } from "@/lib/p2p/format";
+import { parseAmount } from "@/lib/p2p/filters";
 import { useP2PStore } from "@/lib/p2p/store";
 import { AlertOp, Side, pairKey } from "@/lib/p2p/types";
 import type { ExtraQuote } from "@/hooks/use-p2p-data";
@@ -234,11 +235,11 @@ function AlertsSection({ quote }: { quote: PairQuote }) {
   const [op, setOp] = useState<AlertOp>("below");
   const [target, setTarget] = useState<string>("");
 
-  const canCreate = Number(target.replace(",", ".")) > 0;
+  const canCreate = parseAmount(target) !== null;
 
   const create = () => {
-    const value = Number(target.replace(",", "."));
-    if (!Number.isFinite(value) || value <= 0) return;
+    const value = parseAmount(target);
+    if (value === null) return;
     addAlert({ crypto, fiat, side, op, target: value });
     toast.success("Алерт создан", {
       description: `${crypto}/${fiat} · ${op === "above" ? "выше" : "ниже"} ${formatPrice(value)} ${fiat}`,
