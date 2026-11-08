@@ -26,7 +26,8 @@ function buildRequestUrl(proxyUrl?: string): string {
   if (proxy.includes("{url}")) {
     return proxy.replace("{url}", encodeURIComponent(P2P_API_URL));
   }
-  return proxy.endsWith("=") || proxy.endsWith("?")
+  // если URL заканчивается на разделитель — кодируем адрес API для встраивания
+  return /(?:[=?&])$/.test(proxy)
     ? proxy + encodeURIComponent(P2P_API_URL)
     : proxy + P2P_API_URL;
 }

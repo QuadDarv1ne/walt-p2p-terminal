@@ -89,6 +89,11 @@ export function Header({ mode, hasError, loading, secondsLeft, onRefresh, onOpen
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
               Демо-данные
             </Badge>
+          ) : mode === "relay" ? (
+            <Badge variant="outline" className="gap-1.5 border-violet-500/60 text-violet-600 dark:text-violet-400">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-500" />
+              Через релей
+            </Badge>
           ) : (
             <Badge variant="outline" className="gap-1.5 border-emerald-500/60 text-emerald-600 dark:text-emerald-400">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />

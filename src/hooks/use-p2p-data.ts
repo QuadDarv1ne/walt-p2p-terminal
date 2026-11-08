@@ -359,10 +359,11 @@ export function useP2pData() {
     // потому что между тиками проходит больше окна
     const cycleKey = [...unique.keys()].sort().join("|");
     const now = Date.now();
-    if (
-      cycleKey === lastCycleRef.current.key &&
-      now - lastCycleRef.current.at < Math.max(8000, settings.refreshSec * 1000 - 3000)
-    ) {
+    // защита от повторного опроса: пропускаем тик, если набор пар не менялся
+    // и с последнего запуска прошло меньше окна (минимум 8 сек или refreshSec*1000-3с)
+    const sameKey = cycleKey === lastCycleRef.current.key;
+    const withinWindow = now - lastCycleRef.current.at < Math.max(8000, settings.refreshSec * 1000 - 3000);
+    if (sameKey && withinWindow) {
       return;
     }
     lastCycleRef.current = { key: cycleKey, at: now };
@@ -474,8 +475,10 @@ export function useP2pData() {
     if (!hydrated) return;
     if (modeRef.current === settings.mode) return;
     modeRef.current = settings.mode;
-    setSellRes((prev) => (settings.mode === "demo" ? null : prev?.source === "demo" ? null : prev));
-    setBuyRes((prev) => (settings.mode === "demo" ? null : prev?.source === "demo" ? null : prev));
+    // при смене режима — всегда сбрасываем результаты, чтобы не показывать
+    // цены из предыдущего режима (демо ≠ реальные данные)
+    setSellRes(null);
+    setBuyRes(null);
     setExtraQuotes({});
     setMatrix({});
     clearHistory();
@@ -576,7 +579,7 @@ export function useP2pData() {
       cycleRef.current();
     },
     refreshMatrix: () => matrixRef.current(fiat),
-    dataSource: (sellRes?.source ?? "demo") as DataSource,
+    dataSource: (sellRes?.source ?? settings.mode) as DataSource,
   };
 }
 

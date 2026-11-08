@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BookOpen,
   CheckCircle2,
@@ -84,15 +84,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   // поэтому локальное состояние всегда актуально на момент открытия
   const [mode, setMode] = useState<ConnMode>(settings.mode);
   const [apiKey, setApiKey] = useState(settings.apiKey);
-  // для релея — предзаполнить адрес по умолчанию
-  const relayDefault = mode === "relay" && settings.proxyList.length === 0
-    ? [DEFAULT_RELAY_URL]
-    : [];
-  const [proxyText, setProxyText] = useState(
-    settings.proxyList.length > 0
-      ? settings.proxyList.join("\n")
-      : relayDefault.join("\n"),
-  );
+  const [proxyText, setProxyText] = useState(settings.proxyList.join("\n"));
   const [refreshSec, setRefreshSec] = useState(settings.refreshSec);
   const [pageSize, setPageSize] = useState(settings.pageSize);
   const [showKey, setShowKey] = useState(false);
@@ -100,6 +92,15 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [proxyResults, setProxyResults] = useState<Record<number, ProxyTestResult>>({});
   const [testingProxies, setTestingProxies] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // при смене режима — сбрасывать proxyText к релевантному дефолту
+  useEffect(() => {
+    if (mode === "relay" && settings.proxyList.length === 0) {
+      setProxyText(DEFAULT_RELAY_URL);
+    } else if (mode !== "relay") {
+      setProxyText("");
+    }
+  }, [mode, settings.proxyList]);
 
   const proxyUrls = proxyText
     .split("\n")
