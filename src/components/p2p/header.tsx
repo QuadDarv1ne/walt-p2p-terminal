@@ -1,11 +1,10 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { useTheme } from "next-themes";
-import { ArrowLeftRight, Moon, Network, RefreshCw, Settings, Sun, Timer } from "lucide-react";
+import { ArrowLeftRight, Network, RefreshCw, Settings, Timer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useMounted } from "@/hooks/use-mounted";
+import { ThemeSwitcher } from "@/components/p2p/theme-switcher";
 import type { ConnMode } from "@/lib/p2p/types";
 import { PeerNetworkSnapshot, peerNetwork } from "@/lib/p2p/webrtc";
 
@@ -24,22 +23,6 @@ interface HeaderProps {
   secondsLeft: number;
   onRefresh: () => void;
   onOpenSettings: () => void;
-}
-
-function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-  const mounted = useMounted();
-  if (!mounted) return <div className="h-9 w-9" />;
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      aria-label="Переключить тему"
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-    >
-      {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-    </Button>
-  );
 }
 
 function PeerBadge() {
@@ -115,7 +98,7 @@ export function Header({ mode, hasError, loading, secondsLeft, onRefresh, onOpen
           <Button variant="outline" size="icon" onClick={onOpenSettings} aria-label="Настройки">
             <Settings className="h-4 w-4" />
           </Button>
-          <ThemeToggle />
+          <ThemeSwitcher />
         </div>
       </div>
     </header>

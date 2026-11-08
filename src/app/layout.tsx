@@ -51,7 +51,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans`}
       >
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          themes={["light", "dark", "orange", "purple", "sky"]}
+          enableSystem={false}
+          disableTransitionOnChange
+        >
           {children}
           <Toaster position="top-right" richColors closeButton />
           <SwRegister />

@@ -107,7 +107,13 @@ function ChartSection() {
                 formatter={(value) => [`${formatPrice(Number(value))} ${fiat}`, "Лучший курс"]}
                 labelFormatter={(label) => formatTime(Number(label))}
                 contentStyle={{
-                  background: resolvedTheme === "dark" ? "#1c221f" : "#ffffff",
+                  background: {
+                    light: "#ffffff",
+                    sky: "#ffffff",
+                    dark: "#1c221f",
+                    orange: "#241a12",
+                    purple: "#1e1725",
+                  }[resolvedTheme ?? "dark"] ?? "#ffffff",
                   border: "1px solid rgba(128,128,128,0.25)",
                   borderRadius: 8,
                   fontSize: 12,

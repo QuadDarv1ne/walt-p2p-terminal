@@ -1,7 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+/* Тёмные темы: dark, orange, purple — для них работают классы dark:* */
+@custom-variant dark (&:is(.dark *, .orange *, .purple *));
 
 @theme inline {
   --color-background: var(--background);
@@ -43,8 +44,10 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-:root {
+:root,
+.light {
   --radius: 0.625rem;
+  /* ── Светлая (по умолчанию) ── */
   --background: oklch(0.985 0.002 160);
   --foreground: oklch(0.16 0.01 165);
   --card: oklch(1 0 0);
@@ -60,6 +63,7 @@
   --accent: oklch(0.955 0.01 160);
   --accent-foreground: oklch(0.22 0.01 165);
   --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.91 0.008 160);
   --input: oklch(0.91 0.008 160);
   --ring: oklch(0.55 0.13 163);
@@ -78,6 +82,7 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
+/* ── Тёмная ── */
 .dark {
   --background: oklch(0.14 0.006 165);
   --foreground: oklch(0.94 0.005 165);
@@ -94,6 +99,7 @@
   --accent: oklch(0.26 0.008 165);
   --accent-foreground: oklch(0.94 0.005 165);
   --destructive: oklch(0.68 0.19 25);
+  --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 13%);
   --ring: oklch(0.76 0.17 163);
@@ -112,6 +118,115 @@
   --sidebar-ring: oklch(0.76 0.17 163);
 }
 
+/* ── Оранжевая (тёплая тёмная) ── */
+.orange {
+  --background: oklch(0.16 0.018 55);
+  --foreground: oklch(0.94 0.025 65);
+  --card: oklch(0.20 0.02 55);
+  --card-foreground: oklch(0.94 0.025 65);
+  --popover: oklch(0.20 0.02 55);
+  --popover-foreground: oklch(0.94 0.025 65);
+  --primary: oklch(0.72 0.17 50);
+  --primary-foreground: oklch(0.16 0.02 55);
+  --secondary: oklch(0.26 0.02 55);
+  --secondary-foreground: oklch(0.94 0.025 65);
+  --muted: oklch(0.24 0.02 55);
+  --muted-foreground: oklch(0.66 0.03 60);
+  --accent: oklch(0.27 0.025 55);
+  --accent-foreground: oklch(0.94 0.025 65);
+  --destructive: oklch(0.65 0.2 25);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.72 0.17 50);
+  --chart-1: oklch(0.72 0.17 50);
+  --chart-2: oklch(0.68 0.16 15);
+  --chart-3: oklch(0.78 0.14 80);
+  --chart-4: oklch(0.72 0.14 170);
+  --chart-5: oklch(0.74 0.15 20);
+  --sidebar: oklch(0.20 0.02 55);
+  --sidebar-foreground: oklch(0.94 0.025 65);
+  --sidebar-primary: oklch(0.72 0.17 50);
+  --sidebar-primary-foreground: oklch(0.16 0.02 55);
+  --sidebar-accent: oklch(0.27 0.025 55);
+  --sidebar-accent-foreground: oklch(0.94 0.025 65);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.72 0.17 50);
+}
+
+/* ── Фиолетовая (тёмная) ── */
+.purple {
+  --background: oklch(0.15 0.02 300);
+  --foreground: oklch(0.94 0.01 300);
+  --card: oklch(0.19 0.025 300);
+  --card-foreground: oklch(0.94 0.01 300);
+  --popover: oklch(0.19 0.025 300);
+  --popover-foreground: oklch(0.94 0.01 300);
+  --primary: oklch(0.72 0.18 310);
+  --primary-foreground: oklch(0.15 0.02 300);
+  --secondary: oklch(0.25 0.025 300);
+  --secondary-foreground: oklch(0.94 0.01 300);
+  --muted: oklch(0.23 0.025 300);
+  --muted-foreground: oklch(0.66 0.02 300);
+  --accent: oklch(0.26 0.03 300);
+  --accent-foreground: oklch(0.94 0.01 300);
+  --destructive: oklch(0.65 0.22 30);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.72 0.18 310);
+  --chart-1: oklch(0.72 0.18 310);
+  --chart-2: oklch(0.68 0.16 340);
+  --chart-3: oklch(0.76 0.15 80);
+  --chart-4: oklch(0.7 0.14 180);
+  --chart-5: oklch(0.72 0.15 10);
+  --sidebar: oklch(0.19 0.025 300);
+  --sidebar-foreground: oklch(0.94 0.01 300);
+  --sidebar-primary: oklch(0.72 0.18 310);
+  --sidebar-primary-foreground: oklch(0.15 0.02 300);
+  --sidebar-accent: oklch(0.26 0.03 300);
+  --sidebar-accent-foreground: oklch(0.94 0.01 300);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.72 0.18 310);
+}
+
+/* ── Небесная (светло-голубая) ── */
+.sky {
+  --radius: 0.625rem;
+  --background: oklch(0.975 0.012 240);
+  --foreground: oklch(0.20 0.03 240);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.20 0.03 240);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.20 0.03 240);
+  --primary: oklch(0.58 0.16 230);
+  --primary-foreground: oklch(0.98 0.005 240);
+  --secondary: oklch(0.94 0.018 240);
+  --secondary-foreground: oklch(0.28 0.025 240);
+  --muted: oklch(0.93 0.02 240);
+  --muted-foreground: oklch(0.50 0.03 240);
+  --accent: oklch(0.92 0.025 235);
+  --accent-foreground: oklch(0.28 0.025 240);
+  --destructive: oklch(0.58 0.22 25);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.88 0.02 240);
+  --input: oklch(0.88 0.02 240);
+  --ring: oklch(0.58 0.16 230);
+  --chart-1: oklch(0.58 0.16 230);
+  --chart-2: oklch(0.62 0.15 190);
+  --chart-3: oklch(0.55 0.12 270);
+  --chart-4: oklch(0.72 0.16 100);
+  --chart-5: oklch(0.70 0.15 40);
+  --sidebar: oklch(0.975 0.012 240);
+  --sidebar-foreground: oklch(0.20 0.03 240);
+  --sidebar-primary: oklch(0.35 0.08 240);
+  --sidebar-primary-foreground: oklch(0.98 0.005 240);
+  --sidebar-accent: oklch(0.94 0.018 240);
+  --sidebar-accent-foreground: oklch(0.28 0.025 240);
+  --sidebar-border: oklch(0.88 0.02 240);
+  --sidebar-ring: oklch(0.58 0.16 230);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -121,11 +236,22 @@
   }
 }
 
-/* терминальная сетка на фоне */
+/* терминальная сетка на фоне — цвет адаптируется под тему */
+:root,
+.light,
+.sky {
+  --grid-line: oklch(0 0 0 / 4%);
+}
+.dark,
+.orange,
+.purple {
+  --grid-line: oklch(1 0 0 / 2.5%);
+}
+
 .terminal-bg {
   background-image:
-    linear-gradient(to right, oklch(1 0 0 / 2.5%) 1px, transparent 1px),
-    linear-gradient(to bottom, oklch(1 0 0 / 2.5%) 1px, transparent 1px);
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
   background-size: 42px 42px;
 }
 
@@ -133,17 +259,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* аккуратные скроллбары */
+/* аккуратные скроллбары — цвет из переменной темы */
 .thin-scroll {
   scrollbar-width: thin;
-  scrollbar-color: oklch(0.5 0.02 165) transparent;
+  scrollbar-color: var(--border) transparent;
 }
 .thin-scroll::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 .thin-scroll::-webkit-scrollbar-thumb {
-  background: oklch(0.5 0.02 165);
+  background: var(--muted-foreground);
   border-radius: 999px;
 }
 .thin-scroll::-webkit-scrollbar-track {
