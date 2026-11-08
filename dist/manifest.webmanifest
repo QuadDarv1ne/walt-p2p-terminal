@@ -1,0 +1,37 @@
+{
+  "name": "Walt P2P Терминал",
+  "short_name": "P2P Терминал",
+  "description": "Децентрализованный мониторинг P2P Маркета Walt: лучшие курсы, спред, P2P-сеть между браузерами, избранное и алерты. Работает офлайн после первой загрузки.",
+  "id": "walt-p2p-terminal",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#101613",
+  "theme_color": "#101613",
+  "lang": "ru",
+  "categories": ["finance", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-64.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
