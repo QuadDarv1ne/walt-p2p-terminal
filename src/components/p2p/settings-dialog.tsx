@@ -16,7 +16,7 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
-import { testProxy } from "@/lib/p2p/api";
+import { testProxy, DEFAULT_RELAY_URL } from "@/lib/p2p/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -84,7 +84,15 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   // поэтому локальное состояние всегда актуально на момент открытия
   const [mode, setMode] = useState<ConnMode>(settings.mode);
   const [apiKey, setApiKey] = useState(settings.apiKey);
-  const [proxyText, setProxyText] = useState(settings.proxyList.join("\n"));
+  // для релея — предзаполнить адрес по умолчанию
+  const relayDefault = mode === "relay" && settings.proxyList.length === 0
+    ? [DEFAULT_RELAY_URL]
+    : [];
+  const [proxyText, setProxyText] = useState(
+    settings.proxyList.length > 0
+      ? settings.proxyList.join("\n")
+      : relayDefault.join("\n"),
+  );
   const [refreshSec, setRefreshSec] = useState(settings.refreshSec);
   const [pageSize, setPageSize] = useState(settings.pageSize);
   const [showKey, setShowKey] = useState(false);
@@ -210,7 +218,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       if (data.settings && typeof data.settings === "object") {
         const s = data.settings;
         patchSettings({
-          ...(typeof s.mode === "string" && ["demo", "direct", "proxy"].includes(s.mode)
+          ...(typeof s.mode === "string" && ["demo", "direct", "proxy", "relay"].includes(s.mode)
             ? { mode: s.mode as ConnMode }
             : {}),
           ...(Array.isArray(s.proxyList) ? { proxyList: s.proxyList.map(String) } : {}),
@@ -248,6 +256,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <SelectItem value="demo">Демо-данные (без ключа)</SelectItem>
                 <SelectItem value="direct">Реальный API — напрямую</SelectItem>
                 <SelectItem value="proxy">Реальный API — через прокси</SelectItem>
+              <SelectItem value="relay">Реальный API — через локальный релей</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
@@ -298,57 +307,98 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </div>
           )}
 
-          {mode === "proxy" && (
-            <div className="space-y-2">
-              <Label htmlFor="proxy-list" className="flex items-center gap-1.5">
-                <Globe className="h-3.5 w-3.5" />
-                CORS-прокси (один в строке)
-              </Label>
-              <Textarea
-                id="proxy-list"
-                placeholder={"https://мой-прокси.example/?url={url}\nhttps://резервный-прокси.example/?url={url}"}
-                value={proxyText}
-                onChange={(e) => setProxyText(e.target.value)}
-                className="num h-24 resize-y text-xs"
-              />
-              <p className="text-xs text-muted-foreground">
-                Запросы идут по списку до первого рабочего: если прокси упал, терминал
-                автоматически переключается на следующий. Шаблон{" "}
-                <code className="rounded bg-muted px-1">{"{url}"}</code> заменяется на адрес API.
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" onClick={checkProxies} disabled={testingProxies}>
-                  {testingProxies ? (
-                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="mr-1.5 h-4 w-4" />
-                  )}
-                  Проверить прокси
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  {proxyUrls.length ? `${proxyUrls.length} в списке` : "список пуст"}
-                </span>
-              </div>
-              {Object.keys(proxyResults).length > 0 && (
-                <div className="space-y-1 rounded-md border border-border bg-muted/30 p-2">
-                  {proxyUrls.map((p, i) =>
-                    proxyResults[i] ? (
-                      <div key={i} className="num flex items-center gap-2 text-[11px]">
-                        {proxyResults[i].ok ? (
-                          <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
-                        ) : (
-                          <TriangleAlert className="h-3 w-3 shrink-0 text-rose-500" />
-                        )}
-                        <span className="min-w-0 flex-1 truncate">{p}</span>
-                        <Badge variant="outline" className="shrink-0 text-[10px]">
-                          {proxyResults[i].message}
-                        </Badge>
-                      </div>
-                    ) : null,
-                  )}
+          {(mode === "proxy" || mode === "relay") && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="proxy-list" className="flex items-center gap-1.5">
+                  <Globe className="h-3.5 w-3.5" />
+                  {mode === "relay"
+                    ? "Адрес локального релея (один в строке)"
+                    : "CORS-прокси (один в строке)"}
+                </Label>
+                <Textarea
+                  id="proxy-list"
+                  placeholder={mode === "relay"
+                    ? DEFAULT_RELAY_URL
+                    : "https://мой-прокси.example/?url={url}\nhttps://резервный-прокси.example/?url={url}"}
+                  value={proxyText}
+                  onChange={(e) => setProxyText(e.target.value)}
+                  className="num h-24 resize-y text-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {mode === "relay"
+                    ? "Локальный релей принимает запросы с браузера и ходит к API Walt напрямую (или через upstream-прокси). Запустите его командой: `bun scripts/relay-proxy.ts`"
+                    : "Запросы идут по списку до первого рабочего: если прокси упал, терминал автоматически переключается на следующий. Шаблон "}<code className="rounded bg-muted px-1">{"{url}"}</code>{mode === "relay" ? "" : " заменяется на адрес API."}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={checkProxies} disabled={testingProxies}>
+                    {testingProxies ? (
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="mr-1.5 h-4 w-4" />
+                    )}
+                    Проверить прокси
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {proxyUrls.length ? `${proxyUrls.length} в списке` : "список пуст"}
+                  </span>
                 </div>
-              )}
-            </div>
+                {Object.keys(proxyResults).length > 0 && (
+                  <div className="space-y-1 rounded-md border border-border bg-muted/30 p-2">
+                    {proxyUrls.map((p, i) =>
+                      proxyResults[i] ? (
+                        <div key={i} className="num flex items-center gap-2 text-[11px]">
+                          {proxyResults[i].ok ? (
+                            <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
+                          ) : (
+                            <TriangleAlert className="h-3 w-3 shrink-0 text-rose-500" />
+                          )}
+                          <span className="min-w-0 flex-1 truncate">{p}</span>
+                          <Badge variant="outline" className="shrink-0 text-[10px]">
+                            {proxyResults[i].message}
+                          </Badge>
+                        </div>
+                      ) : null,
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* пояснение про MTProto-прокси */}
+              <details className="group rounded-md border border-border/50 bg-amber-50/50 px-3 py-2 dark:bg-amber-950/20">
+                <summary className="cursor-pointer list-none text-xs font-medium text-amber-700 hover:text-amber-900 dark:text-amber-400">
+                  <span className="inline-flex items-center gap-1.5">
+                    <TriangleAlert className="h-3.5 w-3.5" />
+                    Ссылки t.me/proxy не подходят
+                  </span>
+                </summary>
+                <div className="mt-2 space-y-1.5 text-xs text-muted-foreground">
+                  <p>
+                    Ссылки вида <code>t.me/proxy?server=...&amp;secret=...</code> — это
+                    <strong> MTProto-прокси для мессенджера Telegram</strong>. Они переносят
+                    только зашифрованный трафик Telegram API и <strong>не могут
+                    использоваться для HTTP-запросов</strong> к p2p.walt.io.
+                  </p>
+                  <p>
+                    Для обхода блокировок используйте:
+                  </p>
+                  <ul className="list-disc space-y-1 pl-4">
+                    <li>
+                      <strong>Локальный релей</strong> — «через локальный релей» в режиме данных +
+                      <code> bun scripts/relay-proxy.ts</code>. Релей ходит в интернет через
+                      системный прокси/VPN.
+                    </li>
+                    <li>
+                      <strong>MTProto-прокси для сайта</strong> — поднимите локальный HTTP/SOCKS-выход
+                      через <code>mihomo</code> (Clash Meta) или <code>Xray</code>, укажите его
+                      <code>PROXY=socks5://127.0.0.1:1080</code> при запуске релея.
+                    </li>
+                    <li>
+                      <strong>Публичные CORS-прокси</strong> — добавьте URL в режиме «через прокси».
+                    </li>
+                  </ul>
+                </div>
+              </details>
+            </>
           )}
 
           <div className="space-y-2">

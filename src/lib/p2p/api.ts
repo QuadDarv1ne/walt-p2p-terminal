@@ -121,7 +121,13 @@ export async function fetchAds(query: AdQuery, opts: FetchOptions): Promise<Fetc
     return { ads: demo.ads, source: "demo", fetchedAt: Date.now(), total: demo.total };
   }
 
-  const proxies = (opts.proxyUrls ?? []).map((p) => p.trim()).filter(Boolean);
+  // режимы, которые ходят через список адресов-посредников (CORS-прокси или локальный релей)
+  const viaProxyList = opts.mode === "proxy" || opts.mode === "relay";
+
+  let proxies = (opts.proxyUrls ?? []).map((p) => p.trim()).filter(Boolean);
+  // для релея без явного списка берём адрес по умолчанию
+  if (opts.mode === "relay" && !proxies.length) proxies = [DEFAULT_RELAY_URL];
+
   const candidates =
     lastGoodProxy && proxies.includes(lastGoodProxy)
       ? [lastGoodProxy, ...proxies.filter((p) => p !== lastGoodProxy)]
@@ -132,13 +138,13 @@ export async function fetchAds(query: AdQuery, opts: FetchOptions): Promise<Fetc
   // ошибка, которую показываем как есть (HTTP-статус цели, а не «проблема с сетью»)
   let httpAbort: P2PApiError | null = null;
 
-  if (opts.mode === "proxy" && !candidates.length) {
+  if (viaProxyList && !candidates.length) {
     throw new P2PApiError("network", "Список прокси пуст", {
       hint: "Добавьте хотя бы один адрес прокси в настройках (режим «через прокси»).",
     });
   }
 
-  for (const proxy of opts.mode === "proxy" ? candidates : [undefined]) {
+  for (const proxy of viaProxyList ? candidates : [undefined]) {
     const url = buildRequestUrl(proxy);
     try {
       res = await fetchWithTimeout(
@@ -156,7 +162,7 @@ export async function fetchAds(query: AdQuery, opts: FetchOptions): Promise<Fetc
       );
       if (!res.ok && (res.status >= 500 || res.status === 429)) {
         lastNetError = new P2PApiError("http", `HTTP ${res.status}`);
-        if (opts.mode !== "proxy") {
+        if (!viaProxyList) {
           // прямому запросу переключиться на другой прокси некуда —
           // показываем честный статус сервера вместо «проблемы CORS»
           httpAbort = new P2PApiError(
@@ -186,6 +192,13 @@ export async function fetchAds(query: AdQuery, opts: FetchOptions): Promise<Fetc
 
   if (!res) {
     if (httpAbort) throw httpAbort;
+    if (opts.mode === "relay") {
+      throw new P2PApiError(
+        "network",
+        "Локальный релей не отвечает",
+        { hint: "Запустите релей командой «bun scripts/relay-proxy.ts» и убедитесь, что он слушает указанный порт." },
+      );
+    }
     if (opts.mode === "proxy") {
       throw new P2PApiError(
         "network",
@@ -223,10 +236,10 @@ export async function fetchAds(query: AdQuery, opts: FetchOptions): Promise<Fetc
   const ads = rawAds.map((r, i) => normalizeAd(r as Record<string, unknown>, i));
   return {
     ads,
-    source: opts.mode === "proxy" ? "proxy" : "direct",
+    source: viaProxyList ? opts.mode : "direct",
     fetchedAt: Date.now(),
     total: ads.length,
-    via: opts.mode === "proxy" ? lastGoodProxy ?? undefined : undefined,
+    via: viaProxyList ? lastGoodProxy ?? undefined : undefined,
   };
 }
 
