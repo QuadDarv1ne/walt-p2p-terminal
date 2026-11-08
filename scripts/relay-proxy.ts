@@ -29,7 +29,10 @@
  * (например, mihomo/Clash), а в PROXY укажите уже его localhost-адрес.
  */
 
-const TARGET = "https://p2p.walt.io/p2p/integration-api/v1/item/online";
+// Bun сам подхватывает .env из корня проекта — адрес API можно задать там
+const TARGET =
+  process.env.NEXT_PUBLIC_P2P_API_URL?.trim() ||
+  "https://p2p.walt.io/p2p/integration-api/v1/item/online";
 const PORT = Number(process.env.PORT) || 8765;
 const UPSTREAM = process.env.PROXY || process.env.https_proxy || process.env.http_proxy || "";
 

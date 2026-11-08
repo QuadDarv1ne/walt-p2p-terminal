@@ -7,7 +7,13 @@ import {
   Side,
 } from "./types";
 
-export const P2P_API_URL = "https://p2p.walt.io/p2p/integration-api/v1/item/online";
+/**
+ * Адрес API берётся из .env (NEXT_PUBLIC_* Next.js подставляет в клиентский бандл
+ * на этапе сборки), поэтому значение нужно задавать до `next build`.
+ */
+export const P2P_API_URL =
+  process.env.NEXT_PUBLIC_P2P_API_URL?.trim() ||
+  "https://p2p.walt.io/p2p/integration-api/v1/item/online";
 
 /** адрес локального CORS-релея по умолчанию (scripts/relay-proxy.ts) */
 export const DEFAULT_RELAY_URL = "http://localhost:8765/";
