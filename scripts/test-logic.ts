@@ -6,7 +6,7 @@
  * Запуск: bun scripts/test-logic.ts
  */
 import { bestPrice, demoAds, demoMidPrice, normalizeAd, buildRequestUrl, P2P_API_URL, describeApiError } from "../src/lib/p2p/api";
-import { filterAds, fitsAmount, parseAmount, sanitizeCode, sortAds, uniquePayments, bestAd } from "../src/lib/p2p/filters";
+import { filterAds, fitsAmount, isInverted, parseAmount, sanitizeCode, sortAds, spreadPercent, uniquePayments, bestAd } from "../src/lib/p2p/filters";
 import { formatMoney, formatPercent, formatPrice } from "../src/lib/p2p/format";
 import {
   HISTORY_LIMIT,
@@ -54,15 +54,32 @@ T("bestPrice BUY = max (выгодно продать)", bestPrice(sellAds, "BUY
 T("bestPrice: пусто → null", bestPrice([], "SELL") === null);
 T("bestPrice: игнорирует ≤0", bestPrice([ad({ price: 0 }), ad({ price: -5 }), ad({ price: 12 })], "SELL") === 12);
 
-/* ── спред: направление считается в UI как (minSELL − maxBUY)… проверяем данные ── */
+/* ── спред и инверсия рынка ── */
 const bb = bestPrice(sellAds, "SELL");
 const buyAds = [ad({ price: 92.0 }), ad({ price: 91.5 }), ad({ price: 90.8 })];
 const bs = bestPrice(buyAds, "BUY");
 // здоровый рынок: лучший ask (покупка) выше лучшего bid (продажа)
-T("спред положительный на здоровом рынке", (bb as number) > (bs as number));
-// инверсия: покупатели дают больше, чем минимум продавцов → арбитражная возможность
+T("спред: положительный на здоровом рынке", (bb as number) > (bs as number));
+T("спред: положительное значение", (spreadPercent(bb, bs) as number) > 0);
+T("спред: к середине рынка (93,7 и 92,0 → 1,83%)", near(spreadPercent(93.7, 92.0) as number, ((93.7 - 92) / ((93.7 + 92) / 2)) * 100));
+T("спред: симметричен по модулю", near(Math.abs(spreadPercent(110, 100) as number), Math.abs(spreadPercent(100, 110) as number)));
+T("спред: нулевой при равных курсах", near(spreadPercent(95, 95) as number, 0));
+T("спред: null если нет покупки", spreadPercent(null, 90) === null);
+T("спред: null если нет продажи", spreadPercent(90, null) === null);
+T("спред: null на нулевых/отрицательных", spreadPercent(0, 90) === null && spreadPercent(90, -1) === null);
+T("спред: null на NaN", spreadPercent(NaN, 90) === null);
+
+// инверсия: покупатели дают больше, чем минимум продавцов → арбитражная возможность.
+// Реальный случай (USDT/RUB): SELL от 85,00, BUY до 98,00 с лимитом 4 999–5 000
 const buyAds2 = [ad({ price: 96.5 }), ad({ price: 97 })];
 T("инверсия (bid > ask) распознаётся", (bestPrice(buyAds2, "BUY") as number) > (bb as number));
+T("инверсия: isInverted = true", isInverted(85.0, 98.0));
+T("инверсия: спред отрицательный", (spreadPercent(85.0, 98.0) as number) < 0);
+T("инверсия: модуль спреда разумен (−14,2%, а не −15,3% к ask)",
+  Math.abs(spreadPercent(85.0, 98.0) as number) < 15 && Math.abs(spreadPercent(85.0, 98.0) as number) > 14);
+T("инверсия: здоровый рынок не инвертирован", !isInverted(93.7, 92.0));
+T("инверсия: равные курсы не инверсия", !isInverted(95, 95));
+T("инверсия: null → false", !isInverted(null, 98) && !isInverted(85, null) && !isInverted(0, 0));
 
 /* ── нормализация ответа API ── */
 const na = normalizeAd({ id: 7, nickname: "tr", price: "94,3", minAmount: "1000", executeRate: 0.95 }, 0);
@@ -126,6 +143,12 @@ T("bestAd: цена ≤ 0 не побеждает валидную", bestAd(dirt
 T("bestAd: только мусор → null", bestAd([ad({ price: 0 }), ad({ price: -1 })], "SELL") === null);
 T("bestAd: NaN игнорируется", bestAd([ad({ id: "nan", price: NaN }), ad({ id: "ok", price: 5 })], "SELL")?.id === "ok");
 T("bestAd: согласован с bestPrice", bestAd(sellAds, "SELL")?.price === bestPrice(sellAds, "SELL"));
+// регресс: bestPrice раньше считал min/max по своему и мог «выбрать» мусор,
+// на который bestAd не ставит подсветку — сводка и таблица расходились
+T("bestPrice = bestAd: мусорная цена не побеждает", bestPrice(dirty, "SELL") === 91);
+T("bestPrice = bestAd: только мусор → null", bestPrice([ad({ price: 0 }), ad({ price: -1 })], "SELL") === null);
+T("bestPrice = bestAd: NaN игнорируется", bestPrice([ad({ price: NaN }), ad({ price: 5 })], "SELL") === 5);
+T("bestPrice = bestAd: BUY берёт максимум", bestPrice(sellAds, "BUY") === bestAd(sellAds, "BUY")?.price);
 
 /* ── сортировка ── */
 const S = [ad({ id: "a", price: 10 }), ad({ id: "b", price: 2 }), ad({ id: "c", price: 0 }), ad({ id: "d", price: 1 })];
@@ -173,6 +196,8 @@ T("history: до лимита объект не копируется", pruneHist
 T("formatPrice: null → тире", formatPrice(null) === "—");
 T("formatMoney: 15000 → 15\u00A0000,00", formatMoney(15000) === "15\u00A0000,00");
 T("formatPercent: дробная запятая", formatPercent(12.5, 1) === "12,5%");
+T("formatPercent: отрицательное — типографский минус", formatPercent(-6.39) === "−6,39%");
+T("formatPercent: без «+» у положительного", formatPercent(1.5, 1) === "1,5%");
 T("pairKey собирает ключ", pairKey("USDT", "RUB", "SELL") === "USDT-RUB-SELL");
 
 /* ── списки валют: только то, что принимает боевой API ── */

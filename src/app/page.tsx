@@ -111,6 +111,8 @@ export default function Page() {
         <StatsCards
           quote={data.currentQuote}
           spreadPct={data.spreadPct}
+          spreadInverted={data.spreadInverted}
+          bestAds={data.bestAds}
           lastUpdated={data.sellRes?.fetchedAt ?? null}
         />
 

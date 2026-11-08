@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { bestPrice, fetchAds } from "@/lib/p2p/api";
+import { isInverted, spreadPercent, bestAd } from "@/lib/p2p/filters";
 import { tabSync } from "@/lib/p2p/broadcast";
 import { peerNetwork } from "@/lib/p2p/webrtc";
 import { useP2PStore } from "@/lib/p2p/store";
@@ -557,11 +558,27 @@ export function useP2pData() {
     };
   }, [sellRes, buyRes]);
 
-  const spreadPct = useMemo(() => {
-    if (!currentQuote.bestBuy || !currentQuote.bestSell) return null;
-    // классический спред: (лучшая цена покупки ask − лучшая цена продажи bid) / ask
-    return ((currentQuote.bestBuy - currentQuote.bestSell) / currentQuote.bestBuy) * 100;
-  }, [currentQuote]);
+  const spreadPct = useMemo(
+    () => spreadPercent(currentQuote.bestBuy, currentQuote.bestSell),
+    [currentQuote],
+  );
+
+  // инверсия рынка (bid > ask) почти всегда означает, что лучший курс держится
+  // объявлением с узкими лимитами: показать это пользователю важнее, чем сам процент
+  const spreadInverted = useMemo(
+    () => isInverted(currentQuote.bestBuy, currentQuote.bestSell),
+    [currentQuote],
+  );
+
+  // сами объявления-лидеры: интерфейс показывает их мейкера и лимиты, чтобы
+  // «лучший курс» не выглядел доступным на любую сумму
+  const bestAds = useMemo(
+    () => ({
+      buy: sellRes ? bestAd(sellRes.ads, "SELL") : null,
+      sell: buyRes ? bestAd(buyRes.ads, "BUY") : null,
+    }),
+    [sellRes, buyRes],
+  );
 
   return {
     crypto,
@@ -575,6 +592,8 @@ export function useP2pData() {
     secondsLeft,
     currentQuote,
     spreadPct,
+    spreadInverted,
+    bestAds,
     matrix,
     matrixLoading,
     extraQuotes,

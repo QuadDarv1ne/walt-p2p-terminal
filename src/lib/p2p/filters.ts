@@ -131,3 +131,40 @@ export function bestAd(ads: P2PAd[], side: Side): P2PAd | null {
   }
   return best;
 }
+
+/**
+ * Относительный спред рынка в процентах: (ask − bid) / середина × 100,
+ * где ask — лучшая цена покупки (bestBuy), bid — лучшая цена продажи (bestSell).
+ *
+ * База — середина рынка (midquote), а не ask. На P2P-рынке встречается инверсия:
+ * bid выше ask, потому что выгодное объявление ограничено узкими лимитами
+ * (например, покупка по 98 доступна только на сумму 4 999–5 000). Из-за этого
+ * спред уходит в минус, и раньше это выглядело как ошибка расчёта («−15%»).
+ * Середина даёт симметричную оценку: спред −10% и +10% одинаковы по модулю,
+ * а величина не раздувается на дешёвых парах с малой ценой ask.
+ *
+ * Положительное значение — обычный рынок (купить дороже, чем продать),
+ * отрицательное — инверсия (см. isInverted).
+ * Возвращает null, если хотя бы одна цена неизвестна или неположительна.
+ */
+export function spreadPercent(bestBuy: number | null, bestSell: number | null): number | null {
+  const valid = (v: number | null): v is number =>
+    v !== null && Number.isFinite(v) && v > 0;
+  if (!valid(bestBuy) || !valid(bestSell)) return null;
+  const mid = (bestBuy + bestSell) / 2;
+  if (mid <= 0) return null;
+  return ((bestBuy - bestSell) / mid) * 100;
+}
+
+/**
+ * Инверсия рынка: продать криптовалюту можно дороже, чем купить (bid > ask).
+ *
+ * Это не ошибка данных, а следствие лимитов: объявление с выгодной ценой может
+ * принимать только узкий диапазон сумм, поэтому «лучший курс» на экране не всегда
+ * доступен для вашей сделки. Интерфейс помечает такой рынок отдельно.
+ */
+export function isInverted(bestBuy: number | null, bestSell: number | null): boolean {
+  const valid = (v: number | null): v is number =>
+    v !== null && Number.isFinite(v) && v > 0;
+  return valid(bestBuy) && valid(bestSell) && bestSell > bestBuy;
+}

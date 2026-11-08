@@ -4,16 +4,21 @@
  * Код является интеллектуальной собственностью автора. Лицензия CC BY-SA 4.0.
  */
 
-import { ArrowDownRight, ArrowUpRight, Activity, Percent } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Activity, Percent, TriangleAlert } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { formatPercent, formatPrice, formatSignedPercent, timeAgo } from "@/lib/p2p/format";
+import { formatMoney, formatPercent, formatPrice, formatSignedPercent, timeAgo } from "@/lib/p2p/format";
 import { useP2PStore } from "@/lib/p2p/store";
-import { PairQuote, pairKey } from "@/lib/p2p/types";
+import { P2PAd, PairQuote, pairKey } from "@/lib/p2p/types";
 
 interface StatsCardsProps {
   quote: PairQuote;
   spreadPct: number | null;
+  /** bid > ask: лучший курс продажи выше лучшего курса покупки */
+  spreadInverted: boolean;
+  /** объявления, задающие лучшие курсы — показываем их лимиты при инверсии */
+  bestAds: { buy: P2PAd | null; sell: P2PAd | null };
   lastUpdated: number | null;
 }
 
@@ -41,11 +46,29 @@ function Delta({ pairId }: { pairId: string }) {
   );
 }
 
-export function StatsCards({ quote, spreadPct, lastUpdated }: StatsCardsProps) {
+/** «1 000 – 5 000 RUB» или null, если лимиты не заданы */
+function limitsLabel(ad: P2PAd | null, fiat: string): string | null {
+  if (!ad) return null;
+  const hasMin = ad.minAmount > 0;
+  const hasMax = ad.maxAmount > 0;
+  if (!hasMin && !hasMax) return null;
+  if (hasMin && hasMax) {
+    return `${formatMoney(ad.minAmount, 0)} – ${formatMoney(ad.maxAmount, 0)} ${fiat}`;
+  }
+  return hasMin ? `от ${formatMoney(ad.minAmount, 0)} ${fiat}` : `до ${formatMoney(ad.maxAmount, 0)} ${fiat}`;
+}
+
+export function StatsCards({ quote, spreadPct, spreadInverted, bestAds, lastUpdated }: StatsCardsProps) {
   const crypto = useP2PStore((s) => s.crypto);
   const fiat = useP2PStore((s) => s.fiat);
 
   const onlinePct = quote.totalCount ? (quote.onlineCount / quote.totalCount) * 100 : 0;
+
+  // при инверсии подсказываем лимиты лидера по продаже: именно они делают курс
+  // недоступным на произвольную сумму, и это единственное объяснение минуса
+  const invertedAd = bestAds.sell;
+  const invertedLimits = spreadInverted ? limitsLabel(invertedAd, fiat) : null;
+  const invertedMaker = spreadInverted && invertedAd?.nickname ? ` (${invertedAd.nickname})` : "";
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -81,17 +104,37 @@ export function StatsCards({ quote, spreadPct, lastUpdated }: StatsCardsProps) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={spreadInverted ? "border-amber-500/50" : undefined}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Спред рынка</span>
             <Percent className="h-4 w-4 text-amber-500" />
           </div>
-          <div className="num mt-1.5 text-2xl font-semibold tracking-tight text-amber-600 dark:text-amber-400">
-            {spreadPct === null ? "—" : formatPercent(spreadPct)}
+          <div className="mt-1.5 flex items-baseline gap-2">
+            <span className="num text-2xl font-semibold tracking-tight text-amber-600 dark:text-amber-400">
+              {spreadPct === null ? "—" : formatPercent(spreadPct)}
+            </span>
+            {spreadInverted && (
+              <Badge
+                variant="outline"
+                className="gap-1 border-amber-500/60 text-[10px] text-amber-700 dark:text-amber-400"
+                title="Продать можно дороже, чем купить: выгодный курс ограничен лимитами объявления"
+              >
+                <TriangleAlert className="h-3 w-3" />
+                инверсия
+              </Badge>
+            )}
           </div>
-          <div className="mt-1.5 text-[11px] text-muted-foreground">
-            разница между курсами продажи и покупки
+          <div className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+            {spreadInverted ? (
+              <>
+                продажа дороже покупки: лучший курс держится
+                {invertedLimits ? <> на лимите {invertedLimits}</> : " на узком лимите объявления"}
+                {invertedMaker}. На вашу сумму курс может быть другим.
+              </>
+            ) : (
+              "разница между курсами продажи и покупки относительно середины рынка"
+            )}
           </div>
         </CardContent>
       </Card>

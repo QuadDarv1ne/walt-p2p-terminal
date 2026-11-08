@@ -23,7 +23,10 @@ export function formatPrice(value: number | null | undefined): string {
 
 export function formatPercent(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
-  return `${value.toFixed(digits).replace(".", ",")}%`;
+  // типографский минус вместо ASCII: в интерфейсе рядом с числами он читается
+  // ровнее и не «прыгает» по ширине в карточках и таблицах
+  const sign = value < 0 ? "−" : "";
+  return `${sign}${Math.abs(value).toFixed(digits).replace(".", ",")}%`;
 }
 
 export function formatSignedPercent(value: number | null | undefined, digits = 2): string {

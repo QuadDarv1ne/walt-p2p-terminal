@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPercent, formatPrice } from "@/lib/p2p/format";
+import { isInverted, spreadPercent } from "@/lib/p2p/filters";
 import { useP2PStore } from "@/lib/p2p/store";
 import { CRYPTOS } from "@/lib/p2p/types";
 import type { MatrixEntry } from "@/hooks/use-p2p-data";
@@ -56,11 +57,10 @@ export function PairMatrix({ fiat, matrix, loading, selectedCrypto, onRefresh }:
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {CRYPTOS.map((c) => {
             const entry = matrix[`${c}|${fiat}`];
-            // единая формула со сводкой сверху: (лучшая покупка ask − лучшая продажа bid) / ask
-            const spread =
-              entry?.bestBuy && entry?.bestSell
-                ? ((entry.bestBuy - entry.bestSell) / entry.bestBuy) * 100
-                : null;
+            // единая формула со сводкой сверху (filters.spreadPercent):
+            // спред к середине рынка, отрицательное значение — инверсия
+            const spread = entry ? spreadPercent(entry.bestBuy, entry.bestSell) : null;
+            const inverted = entry ? isInverted(entry.bestBuy, entry.bestSell) : false;
             const selected = c === selectedCrypto;
             return (
               <button
@@ -108,7 +108,14 @@ export function PairMatrix({ fiat, matrix, loading, selectedCrypto, onRefresh }:
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Спред</span>
+                      <span className="text-muted-foreground">
+                        Спред
+                        {inverted && (
+                          <span className="ml-1 text-amber-600 dark:text-amber-400" title="Продать можно дороже, чем купить: выгодный курс ограничен лимитами объявления">
+                            инверсия
+                          </span>
+                        )}
+                      </span>
                       <span className="num text-amber-600 dark:text-amber-400">
                         {spread === null ? "—" : formatPercent(spread)}
                       </span>

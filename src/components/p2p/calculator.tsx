@@ -5,11 +5,13 @@
  */
 
 import { useMemo, useState } from "react";
-import { Calculator as CalcIcon, Info } from "lucide-react";
+import { Calculator as CalcIcon, Info, TriangleAlert } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isInverted } from "@/lib/p2p/filters";
 import { formatMoney, formatPercent, formatPrice } from "@/lib/p2p/format";
 import { useP2PStore } from "@/lib/p2p/store";
 import { PairQuote } from "@/lib/p2p/types";
@@ -206,6 +208,19 @@ export function Calculator({ quote }: { quote: PairQuote }) {
           укажите её вручную. Сделка совершается в интерфейсе P2P Маркета Walt.
         </span>
       </div>
+
+      {/* инверсия: положительная «прибыль» круговой сделки — артефакт лимитов,
+          а не реальная возможность, и об этом нужно сказать прямо */}
+      {isInverted(quote.bestBuy, quote.bestSell) && (
+        <Alert className="border-amber-500/50">
+          <TriangleAlert className="h-4 w-4 text-amber-500" />
+          <AlertDescription className="text-[11px] leading-snug">
+            Курс продажи выше курса покупки — на таком рынке круговая сделка всегда выглядит
+            прибыльной. Как правило, выгодный курс держится объявлением с узкими лимитами, и на
+            вашу сумму он недоступен. Проверьте лимиты в таблице объявлений.
+          </AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

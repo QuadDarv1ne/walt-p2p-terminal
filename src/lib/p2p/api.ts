@@ -10,6 +10,7 @@ import {
   P2PApiError,
   Side,
 } from "./types";
+import { bestAd } from "./filters";
 
 /**
  * Адрес API берётся из .env (NEXT_PUBLIC_* Next.js подставляет в клиентский бандл
@@ -302,10 +303,14 @@ export async function fetchAds(query: AdQuery, opts: FetchOptions): Promise<Fetc
   };
 }
 
+/**
+ * Лучшая цена по стороне: тонкая обёртка над bestAd, чтобы «лучший курс»
+ * в сводке, матрице, графике и подсветке строки считался ровно по одной логике.
+ * Раньше функция была отдельной копией поиска минимума/максимума и могла
+ * разойтись с подсветкой строки (например, в обработке мусорных цен).
+ */
 export function bestPrice(ads: P2PAd[], side: Side): number | null {
-  const prices = ads.map((a) => a.price).filter((p) => p > 0);
-  if (!prices.length) return null;
-  return side === "SELL" ? Math.min(...prices) : Math.max(...prices);
+  return bestAd(ads, side)?.price ?? null;
 }
 
 /* ------------------------------------------------------------------ */
