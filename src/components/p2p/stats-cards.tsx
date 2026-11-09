@@ -4,11 +4,13 @@
  * Код является интеллектуальной собственностью автора. Лицензия CC BY-SA 4.0.
  */
 
+import { useMemo } from "react";
 import { ArrowDownRight, ArrowUpRight, Activity, Percent, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { formatMoney, formatPercent, formatPrice, formatSignedPercent, timeAgo } from "@/lib/p2p/format";
+import { chronological } from "@/lib/p2p/forecast";
 import { useP2PStore } from "@/lib/p2p/store";
 import { P2PAd, PairQuote, pairKey } from "@/lib/p2p/types";
 
@@ -23,14 +25,22 @@ interface StatsCardsProps {
 }
 
 function Delta({ pairId }: { pairId: string }) {
-  const history = useP2PStore((s) => s.history[pairId]);
-  if (!history || history.length < 2) {
+  const rawHistory = useP2PStore((s) => s.history[pairId]);
+  // порядок в сторе не гарантирован: история приезжает из localStorage, а при
+  // синхронизации вкладок заменяется снапшотом другой вкладки. Без сортировки
+  // «предыдущая» точка могла быть хронологически новее последней, и стрелка
+  // показывала обратное направление.
+  const history = useMemo(() => chronological(rawHistory), [rawHistory]);
+  if (history.length < 2) {
     return <span className="text-xs text-muted-foreground">копим статистику…</span>;
   }
   const last = history[history.length - 1];
   const prev = history[history.length - 2];
+  if (!(prev.best > 0)) {
+    return <span className="text-xs text-muted-foreground">копим статистику…</span>;
+  }
   const delta = ((last.best - prev.best) / prev.best) * 100;
-  if (Math.abs(delta) < 0.0001) {
+  if (!Number.isFinite(delta) || Math.abs(delta) < 0.0001) {
     return <span className="text-xs text-muted-foreground">без изменений</span>;
   }
   const up = delta > 0;

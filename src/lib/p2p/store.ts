@@ -16,8 +16,13 @@ import {
   pairKey,
 } from "./types";
 
-const MAX_WATCH = 8;
-const MAX_ALERTS = 12;
+/**
+ * Лимиты списков. Экспортированы, потому что интерфейс обязан показывать их
+ * пользователю: без этого добавление «13-го алерта» выглядело успешным,
+ * хотя стор молча его отбрасывал.
+ */
+export const MAX_WATCH = 8;
+export const MAX_ALERTS = 12;
 
 interface P2PSettings {
   mode: ConnMode;

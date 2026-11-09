@@ -23,7 +23,6 @@ import {
   Trash2,
   TrendingUp,
 } from "lucide-react";
-import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,7 +41,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatPrice, formatTime, timeAgo } from "@/lib/p2p/format";
 import { parseAmount } from "@/lib/p2p/filters";
-import { useP2PStore } from "@/lib/p2p/store";
+import { chronological } from "@/lib/p2p/forecast";
+import { useP2PStore, MAX_ALERTS, MAX_WATCH } from "@/lib/p2p/store";
 import { AlertOp, Side, pairKey } from "@/lib/p2p/types";
 import type { ExtraQuote } from "@/hooks/use-p2p-data";
 import type { PairQuote } from "@/lib/p2p/types";
@@ -57,10 +57,11 @@ function ChartSection() {
   const fiat = useP2PStore((s) => s.fiat);
   const side = useP2PStore((s) => s.side);
   const history = useP2PStore((s) => s.history[pairKey(crypto, fiat, side)]);
-  const { resolvedTheme } = useTheme();
 
+  // chronological: ломаная recharts рисуется в порядке массива, а не по значению
+  // оси — без сортировки по времени линия «шла назад» после синхронизации вкладок
   const data = useMemo(
-    () => (history ?? []).map((p) => ({ t: p.t, best: p.best })),
+    () => chronological(history).map((p) => ({ t: p.t, best: p.best })),
     [history],
   );
 
@@ -103,23 +104,19 @@ function ChartSection() {
                 domain={["auto", "auto"]}
                 tick={{ fontSize: 10 }}
                 width={64}
-                tickFormatter={(v: number) =>
-                  new Intl.NumberFormat("ru-RU", { notation: "compact" }).format(v)
-                }
+                tickFormatter={(v: number) => formatPrice(v)}
                 stroke="rgba(128,128,128,0.5)"
               />
               <Tooltip
                 formatter={(value) => [`${formatPrice(Number(value))} ${fiat}`, "Лучший курс"]}
                 labelFormatter={(label) => formatTime(Number(label))}
                 contentStyle={{
-                  background: {
-                    light: "#ffffff",
-                    sky: "#ffffff",
-                    dark: "#1c221f",
-                    orange: "#241a12",
-                    purple: "#1e1725",
-                  }[resolvedTheme ?? "dark"] ?? "#ffffff",
-                  border: "1px solid rgba(128,128,128,0.25)",
+                  // цвет из переменной темы: захардкоженная карта тем
+                  // рассинхронизировалась с появлением новой темы и не знала
+                  // про системную
+                  background: "var(--popover)",
+                  color: "var(--popover-foreground)",
+                  border: "1px solid var(--border)",
                   borderRadius: 8,
                   fontSize: 12,
                 }}
@@ -158,12 +155,12 @@ function WatchSection({ extraQuotes }: { extraQuotes: Record<string, ExtraQuote>
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          Отслеживаемые пары (до 8). Курс берётся из лучших объявлений.
+          Отслеживаемые пары (до {MAX_WATCH}). Курс берётся из лучших объявлений.
         </p>
         <Button
           size="sm"
           variant="outline"
-          disabled={alreadyAdded || watchlist.length >= 8}
+          disabled={alreadyAdded || watchlist.length >= MAX_WATCH}
           onClick={() => {
             toggleWatch(crypto, fiat, side);
             toast.success(`Пара ${crypto}/${fiat} добавлена в избранное`);
@@ -239,11 +236,19 @@ function AlertsSection({ quote }: { quote: PairQuote }) {
   const [op, setOp] = useState<AlertOp>("below");
   const [target, setTarget] = useState<string>("");
 
-  const canCreate = parseAmount(target) !== null;
+  const canCreate = parseAmount(target) !== null && alerts.length < MAX_ALERTS;
 
   const create = () => {
     const value = parseAmount(target);
     if (value === null) return;
+    // стор при переполнении молча возвращает прежнее состояние: без этой
+    // проверки интерфейс рапортовал бы об успехе, которого не произошло
+    if (alerts.length >= MAX_ALERTS) {
+      toast.error("Достигнут лимит алертов", {
+        description: `Можно хранить не больше ${MAX_ALERTS} правил — удалите неактуальные.`,
+      });
+      return;
+    }
     addAlert({ crypto, fiat, side, op, target: value });
     toast.success("Алерт создан", {
       description: `${crypto}/${fiat} · ${op === "above" ? "выше" : "ниже"} ${formatPrice(value)} ${fiat}`,

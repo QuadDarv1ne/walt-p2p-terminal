@@ -25,12 +25,17 @@ import { HistoryPoint } from "./types";
 export const MIN_POINTS_FOR_FORECAST = 8;
 
 /**
- * Максимальный горизонт прогноза в шагах обновления.
+ * Максимальный горизонт прогноза в минутах.
  *
- * При интервале 30 с это два часа. Дальше экстраполяция линейного тренда
- * теряет смысл настолько, что интервал становится шире самого рынка.
+ * Два часа: при типичном интервале 30 с это ровно 240 точек ряда. Дальше
+ * экстраполяция линейного тренда теряет смысл настолько, что интервал
+ * становится шире самого рынка.
+ *
+ * Ограничение именно по времени, а не по числу шагов: иначе при быстром
+ * автообновлении (10 с) все четыре горизонта упёрлись бы в один и тот же
+ * потолок и подписи кнопок слились бы в одинаковые.
  */
-export const MAX_HORIZON_STEPS = 240;
+export const MAX_HORIZON_MINUTES = 120;
 
 /** Доля истории, отдаваемая под обучение при проверке качества (backtest) */
 const BACKTEST_TRAIN_RATIO = 0.7;
@@ -87,6 +92,22 @@ function medianStep(points: HistoryPoint[]): number {
 }
 
 /**
+ * Ряд в хронологическом порядке и только с валидными точками.
+ *
+ * Порядок в сторе не гарантирован: история приезжает из localStorage, а при
+ * синхронизации вкладок (`applySyncState`) целиком заменяется снапшотом другой
+ * вкладки. Любая статистика (наклон, волатильность, ломаная графика) обязана
+ * считаться по времени, а не по порядку массива — иначе «приращение»
+ * считается между случайными по датам точками.
+ */
+export function chronological(points: HistoryPoint[]): HistoryPoint[] {
+  if (!Array.isArray(points)) return [];
+  return points
+    .filter((p) => p && Number.isFinite(p.t) && Number.isFinite(p.best))
+    .sort((a, b) => a.t - b.t);
+}
+
+/**
  * Линейный тренд по точкам истории (метод наименьших квадратов).
  *
  * Ось времени нормируется шагом обновления: тогда `slope` — это прирост цены
@@ -98,11 +119,7 @@ function medianStep(points: HistoryPoint[]): number {
  * имеют одинаковую метку времени (вырожденная ось — наклон не определён).
  */
 export function fitTrend(points: HistoryPoint[]): TrendFit | null {
-  if (!Array.isArray(points) || points.length < MIN_POINTS_FOR_FORECAST) return null;
-
-  const sorted = [...points]
-    .filter((p) => p && Number.isFinite(p.t) && Number.isFinite(p.best))
-    .sort((a, b) => a.t - b.t);
+  const sorted = chronological(points);
   if (sorted.length < MIN_POINTS_FOR_FORECAST) return null;
 
   const stepMs = medianStep(sorted);
@@ -173,7 +190,12 @@ export function forecastInterval(fit: TrendFit, steps: number): { low: number; h
   const x = fit.lastX + steps;
   const se = fit.residualStd * Math.sqrt(1 + 1 / fit.n + ((x - fit.meanX) ** 2) / fit.sxx);
   const value = forecastValue(fit, steps);
-  return { low: value - Z_95 * se, high: value + Z_95 * se };
+  // нижняя граница не бывает отрицательной: курс валюты физически > 0,
+  // иначе UI показывал бы абсурд вида «−500 … +900» на длинном горизонте
+  const low = Math.max(0, value - Z_95 * se);
+  // при обвальном тренде сама точка прогноза может уйти в минус — верхняя
+  // граница не должна оказаться ниже нижней
+  return { low, high: Math.max(low, value + Z_95 * se) };
 }
 
 export type TrendDirection = "up" | "down" | "flat";
@@ -207,11 +229,12 @@ export function trendPerHour(fit: TrendFit): number | null {
  * за один шаг. Возвращается в долях (0,004 = 0,4%).
  */
 export function volatilityPerStep(points: HistoryPoint[]): number | null {
-  if (!Array.isArray(points) || points.length < 3) return null;
+  const sorted = chronological(points);
+  if (sorted.length < 3) return null;
   const returns: number[] = [];
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1].best;
-    if (prev > 0) returns.push((points[i].best - prev) / prev);
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1].best;
+    if (prev > 0) returns.push((sorted[i].best - prev) / prev);
   }
   if (returns.length < 2) return null;
 
@@ -229,11 +252,9 @@ export function volatilityPerStep(points: HistoryPoint[]): number | null {
  * если данных для разделения не хватает.
  */
 export function backtestMape(points: HistoryPoint[]): number | null {
-  if (!Array.isArray(points) || points.length < MIN_POINTS_FOR_FORECAST) return null;
+  const sorted = chronological(points);
+  if (sorted.length < MIN_POINTS_FOR_FORECAST) return null;
 
-  const sorted = [...points]
-    .filter((p) => p && Number.isFinite(p.t) && Number.isFinite(p.best))
-    .sort((a, b) => a.t - b.t);
   const trainCount = Math.floor(sorted.length * BACKTEST_TRAIN_RATIO);
   if (trainCount < MIN_POINTS_FOR_FORECAST || sorted.length - trainCount < 2) return null;
 

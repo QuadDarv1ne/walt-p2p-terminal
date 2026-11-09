@@ -16,8 +16,10 @@ import {
 } from "../src/lib/p2p/history";
 import { CRYPTOS, FIATS, FIAT_LABEL, pairKey } from "../src/lib/p2p/types";
 import {
+  MAX_HORIZON_MINUTES,
   MIN_POINTS_FOR_FORECAST,
   backtestMape,
+  chronological,
   fitTrend,
   forecastInterval,
   forecastValue,
@@ -368,6 +370,42 @@ T("forecast: backtest: мало точек → null", backtestMape(linear.slice(
 // MAPE считается по тестовой части, а не по всей истории
 T("forecast: backtest не подгоняется под тест (ошибка на тренде больше нуля)",
   (backtestMape(noise.map((p, i) => ({ ...p, best: p.best * (1 + (i % 3) * 0.02) }))) as number) > 0);
+
+/* ── chronological: нормализация ряда ── */
+T("chronological: пустой массив", chronological([]).length === 0);
+T("chronological: null → пустой", chronological(null as unknown as HistoryPoint[]).length === 0);
+T("chronological: NaN/Infinity фильтруются",
+  chronological([{ t: 1, best: 1 }, { t: 2, best: NaN }, { t: 3, best: 3 }]).length === 2);
+T("chronological: сортирует по времени",
+  chronological([{ t: 3, best: 30 }, { t: 1, best: 10 }, { t: 2, best: 20 }])
+    .map((p) => p.t).join(",") === "1,2,3");
+T("chronological: обратный порядок → прямой",
+  chronological([...linear].reverse())
+    .map((p) => p.best).join(",") ===
+  linear.map((p) => p.best).join(","));
+T("chronological: наклон совпадает для обратного ряда",
+  near(fitTrend(chronological([...linear].reverse()))!.slope, 1, 1e-9));
+
+/* ── MAX_HORIZON_MINUTES: ограничение горизонта по времени ── */
+T("MAX_HORIZON_MINUTES: определена и > 0", MAX_HORIZON_MINUTES > 0);
+T("MAX_HORIZON_MINUTES: два часа", MAX_HORIZON_MINUTES === 120);
+// потолок по времени, а не по шагам: иначе при быстром автообновлении
+// все подписи горизонтов слились бы в одну
+T("MAX_HORIZON_MINUTES: в шагах по 30 с это 240", (MAX_HORIZON_MINUTES * 60_000) / 30_000 === 240);
+
+/* ── forecastInterval: не-отрицательная нижняя граница ── */
+// линейный ряд: нижняя граница всегда ≥ 0
+const iv = forecastInterval(linearFit!, 100);
+T("forecast: интервал low ≥ 0 на линейном ряде", iv.low >= 0);
+// длинный горизонт: даже если предсказание уходит в минус, границы корректны
+const ivLong = forecastInterval(linearFit!, 240);
+T("forecast: интервал low ≥ 0 на длинном горизонте", ivLong.low >= 0);
+T("forecast: high никогда не меньше low", ivLong.high >= ivLong.low);
+// обвальный тренд: точка прогноза уходит в отрицательную зону,
+// и верхняя граница не должна оказаться ниже обрезанной нижней
+const crash = Array.from({ length: 12 }, (_, i) => ({ t: F0 + i * 30_000, best: 3000 - i * 280 }));
+const crashIv = forecastInterval(fitTrend(crash)!, 240);
+T("forecast: при обвале low ≥ 0 и high ≥ low", crashIv.low >= 0 && crashIv.high >= crashIv.low);
 
 console.log(`\nИТОГО: PASS ${passed} / FAIL ${failed}`);
 if (failures.length) {

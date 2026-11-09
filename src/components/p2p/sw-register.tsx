@@ -14,10 +14,10 @@ export function SwRegister() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!("serviceWorker" in navigator)) return;
-    if (location.protocol !== "https:" && location.hostname !== "localhost") {
-      // SW требует безопасный контекст
-      return;
-    }
+    // Service Worker требует безопасный контекст. Напрямую сравнивать протокол
+    // с https: неверно: спецификация считает безопасными и 127.0.0.1, и ::1,
+    // из-за чего офлайн-режим молча не работал при доступе по IP-адресу.
+    if (!window.isSecureContext) return;
     const register = () => {
       navigator.serviceWorker
         .register("/sw.js")
