@@ -9,7 +9,7 @@ import { ArrowDownRight, ArrowUpRight, Activity, Percent, TriangleAlert } from "
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { formatMoney, formatPercent, formatPrice, formatSignedPercent } from "@/lib/p2p/format";
+import { formatLimits, formatPercent, formatPrice, formatSignedPercent } from "@/lib/p2p/format";
 import { TimeAgo } from "@/components/p2p/time-ago";
 import { chronological } from "@/lib/p2p/forecast";
 import { useP2PStore } from "@/lib/p2p/store";
@@ -63,10 +63,7 @@ function limitsLabel(ad: P2PAd | null, fiat: string): string | null {
   const hasMin = ad.minAmount > 0;
   const hasMax = ad.maxAmount > 0;
   if (!hasMin && !hasMax) return null;
-  if (hasMin && hasMax) {
-    return `${formatMoney(ad.minAmount, 0)} – ${formatMoney(ad.maxAmount, 0)} ${fiat}`;
-  }
-  return hasMin ? `от ${formatMoney(ad.minAmount, 0)} ${fiat}` : `до ${formatMoney(ad.maxAmount, 0)} ${fiat}`;
+  return formatLimits(ad.minAmount, ad.maxAmount, fiat);
 }
 
 export function StatsCards({ quote, spreadPct, spreadInverted, bestAds, lastUpdated }: StatsCardsProps) {

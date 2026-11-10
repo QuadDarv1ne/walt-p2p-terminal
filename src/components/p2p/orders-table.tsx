@@ -41,7 +41,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { downloadCsv, formatMoney, formatPrice, copyText } from "@/lib/p2p/format";
+import { downloadCsv, formatLimits, formatMoney, formatPrice, copyText } from "@/lib/p2p/format";
 import { TimeAgo } from "@/components/p2p/time-ago";
 import { filterAds, parseAmount, sortAds, uniquePayments, bestAdForAmount } from "@/lib/p2p/filters";
 import { P2PAd, Side } from "@/lib/p2p/types";
@@ -81,7 +81,7 @@ function copyDealInfo(ad: P2PAd, crypto: string, fiat: string) {
     `Сделка P2P: ${crypto}/${fiat}`,
     `Мейкер: ${ad.nickname}${ad.merchantLevel ? ` (${ad.merchantLevel})` : ""}`,
     `Цена: ${formatPrice(ad.price)} ${fiat}`,
-    `Лимиты: ${formatMoney(ad.minAmount, 0)} – ${formatMoney(ad.maxAmount, 0)} ${fiat}`,
+    `Лимиты: ${formatLimits(ad.minAmount, ad.maxAmount, fiat)}`,
     `Оплата: ${ad.payments.join(", ") || "—"}`,
     `Рейтинг: ${ad.executeRate}%`,
   ].join("\n");
@@ -390,8 +390,7 @@ export function OrdersTable({ ads, side, crypto, fiat, loading, lastUpdated, has
                       </div>
                     </TableCell>
                     <TableCell className="num hidden text-xs md:table-cell">
-                      {formatMoney(ad.minAmount, 0)} – {formatMoney(ad.maxAmount, 0)}{" "}
-                      <span className="text-muted-foreground">{fiat}</span>
+                      {formatLimits(ad.minAmount, ad.maxAmount, fiat)}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
                       <div className={`num text-sm font-medium ${ratingColor(ad.executeRate)}`}>

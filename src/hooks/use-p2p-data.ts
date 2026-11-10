@@ -258,7 +258,20 @@ export function useP2pData() {
 
   /* ------------------------- основной цикл ------------------------- */
 
+  /**
+   * Номер последнего запроса за объявлениями.
+   *
+   * Ответ приходит асинхронно, а пару можно сменить быстрее (клик по карточке
+   * в матрице рынков). Без этой проверки ответ на старую пару приходил позже
+   * ответа на новую и перезаписывал таблицу: в заголовке «BTC/RUB», а в строках
+   * объявления USDT — и «лучший курс» в сводке тоже считался по чужой паре.
+   */
+  const refreshSeqRef = useRef(0);
+
   const refresh = useCallback(async () => {
+    const seq = ++refreshSeqRef.current;
+    const isStale = () => seq !== refreshSeqRef.current;
+
     nextAtRef.current = Date.now() + settings.refreshSec * 1000;
     setSecondsLeft(settings.refreshSec);
     setLoading(true);
@@ -283,6 +296,9 @@ export function useP2pData() {
         tabSync.publish(adsCacheKey(crypto, fiat, "BUY"), buy);
       }
 
+      // пока шёл запрос, пользователь открыл другую пару — этот ответ уже не нужен
+      if (isStale()) return;
+
       setSellRes(sell);
       setBuyRes(buy);
       setError(null);
@@ -294,6 +310,7 @@ export function useP2pData() {
       if (bs) pushHistory(crypto, fiat, "BUY", bs);
       peerNetwork.broadcastSnapshot();
     } catch (e) {
+      if (isStale()) return;
       const err = e instanceof P2PApiError ? e : new P2PApiError("network", String(e));
       setError(err);
       // ошибка в реальном режиме не должна оставлять на экране демо-цены:
@@ -308,7 +325,8 @@ export function useP2pData() {
         });
       }
     } finally {
-      setLoading(false);
+      // устаревший ответ не должен снимать индикатор загрузки с нового запроса
+      if (!isStale()) setLoading(false);
     }
   }, [crypto, fiat, opts, pushHistory, queryFor, settings.pageSize, settings.refreshSec, settings.tabSync]);
 

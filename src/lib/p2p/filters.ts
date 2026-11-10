@@ -91,16 +91,34 @@ export function sanitizeCode(input: string | null | undefined): string | null {
 export type AdSortKey = "price" | "executeRate" | "maxAmount";
 
 /**
+ * Значение для сортировки по верхнему лимиту.
+ *
+ * `maxAmount <= 0` в объявлении означает «без максимума» — то есть лимит
+ * фактически бесконечный. Раньше ноль уходил в конец списка при любом
+ * направлении, и сортировка «Лимиты по убыванию» ставила объявления с
+ * неограниченной суммой на последние места — ровно наоборот тому, что искал
+ * пользователь.
+ */
+function sortValue(ad: P2PAd, key: AdSortKey): number {
+  const v = ad[key] as number;
+  if (key === "maxAmount" && Number.isFinite(v) && v <= 0) return Number.POSITIVE_INFINITY;
+  return v;
+}
+
+/**
  * Числовая сортировка объявлений (не лексикографическая!), вход не мутируется.
  * Пустые значения (NaN) и цена ≤ 0 — в конец при любом направлении,
  * чтобы «мусорные» строки не занимали верх списка.
+ * Для `maxAmount` ноль трактуется как «без максимума» (см. sortValue).
  */
 export function sortAds(ads: P2PAd[], key: AdSortKey, dir: "asc" | "desc"): P2PAd[] {
   const mul = dir === "asc" ? 1 : -1;
-  const valid = (v: number) => Number.isFinite(v) && (key !== "price" || v > 0);
+  // Infinity — валидное значение для «без максимума», NaN — мусор
+  const valid = (v: number) =>
+    (Number.isFinite(v) || v === Number.POSITIVE_INFINITY) && (key !== "price" || v > 0);
   return [...ads].sort((a, b) => {
-    const av = a[key] as number;
-    const bv = b[key] as number;
+    const av = sortValue(a, key);
+    const bv = sortValue(b, key);
     if (valid(av) && valid(bv)) return (av - bv) * mul;
     if (valid(av)) return -1;
     if (valid(bv)) return 1;

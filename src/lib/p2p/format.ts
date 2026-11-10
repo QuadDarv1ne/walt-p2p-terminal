@@ -12,8 +12,28 @@ export function formatMoney(value: number | null | undefined, maxFrac = 2, minFr
   }).format(value);
 }
 
-export function formatPrice(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+/**
+ * Лимиты объявления в человеческом виде.
+ *
+ * API и демо-генератор отдают `maxAmount = 0` в значении «без максимума».
+ * В таблице это печаталось как «1 000 – 0 RUB» — цифры, которая читается как
+ * ошибка данных и вводит в заблуждение при выборе объявления.
+ */
+export function formatLimits(
+  minAmount: number | null | undefined,
+  maxAmount: number | null | undefined,
+  fiat: string,
+): string {
+  const hasMin = typeof minAmount === "number" && Number.isFinite(minAmount) && minAmount > 0;
+  const hasMax = typeof maxAmount === "number" && Number.isFinite(maxAmount) && maxAmount > 0;
+  if (!hasMin && !hasMax) return `без ограничений ${fiat}`;
+  if (hasMin && hasMax) {
+    return `${formatMoney(minAmount, 0)} – ${formatMoney(maxAmount, 0)} ${fiat}`;
+  }
+  return hasMin ? `от ${formatMoney(minAmount, 0)} ${fiat}` : `до ${formatMoney(maxAmount, 0)} ${fiat}`;
+}
+
+export function formatPrice(value: number | null | undefined): string {  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
   const frac = value >= 1000 ? 2 : value >= 10 ? 2 : value >= 1 ? 4 : 6;
   return new Intl.NumberFormat("ru-RU", {
     minimumFractionDigits: Math.min(2, frac),

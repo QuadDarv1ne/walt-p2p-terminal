@@ -7,7 +7,7 @@
  */
 import { bestPrice, demoAds, demoMidPrice, normalizeAd, buildRequestUrl, P2P_API_URL, describeApiError } from "../src/lib/p2p/api";
 import { filterAds, fitsAmount, isInverted, parseAmount, sanitizeCode, sortAds, spreadPercent, uniquePayments, bestAd, bestAdForAmount } from "../src/lib/p2p/filters";
-import { formatMoney, formatPercent, formatPrice } from "../src/lib/p2p/format";
+import { formatLimits, formatMoney, formatPercent, formatPrice } from "../src/lib/p2p/format";
 import {
   HISTORY_LIMIT,
   MAX_HISTORY_PAIRS,
@@ -185,6 +185,18 @@ T("сортировка desc (10,2,1), 0 в конце", eq(sortAds(S, "price", 
 T("sortAds не мутирует вход", S[0].price === 10);
 T("сортировка по рейтингу desc", eq(sortAds([ad({ executeRate: 50 }), ad({ executeRate: 90 })], "executeRate", "desc").map((a) => a.executeRate), [90, 50]));
 T("сортировка по maxAmount asc", eq(sortAds([ad({ maxAmount: 500 }), ad({ maxAmount: 100 })], "maxAmount", "asc").map((a) => a.maxAmount), [100, 500]));
+// регресс: maxAmount = 0 значит «без максимума» — это самый большой лимит,
+// а не самый маленький. Раньше такие объявления падали в конец при любом
+// направлении, и сортировка «по убыванию лимита» показывала их последними
+const unlimited = [ad({ id: "lim", maxAmount: 5000 }), ad({ id: "nolimit", maxAmount: 0 }), ad({ id: "big", maxAmount: 90000 })];
+T("сортировка maxAmount desc: «без максимума» первым", sortAds(unlimited, "maxAmount", "desc")[0].id === "nolimit");
+T("сортировка maxAmount desc: порядок остальных по убыванию",
+  eq(sortAds(unlimited, "maxAmount", "desc").map((a) => a.id), ["nolimit", "big", "lim"]));
+T("сортировка maxAmount asc: «без максимума» последним", sortAds(unlimited, "maxAmount", "asc").at(-1)?.id === "nolimit");
+T("сортировка maxAmount asc: порядок остальных по возрастанию",
+  eq(sortAds(unlimited, "maxAmount", "asc").map((a) => a.id), ["lim", "big", "nolimit"]));
+T("сортировка maxAmount: NaN по-прежнему в конце",
+  sortAds([ad({ id: "nan", maxAmount: NaN }), ad({ id: "ok", maxAmount: 10 })], "maxAmount", "desc")[0].id === "ok");
 
 /* ── коды валют (своя пара) ── */
 T("sanitizeCode: lower → upper", sanitizeCode("usdt") === "USDT");
@@ -227,6 +239,18 @@ T("formatPercent: дробная запятая", formatPercent(12.5, 1) === "12
 T("formatPercent: отрицательное — типографский минус", formatPercent(-6.39) === "−6,39%");
 T("formatPercent: без «+» у положительного", formatPercent(1.5, 1) === "1,5%");
 T("pairKey собирает ключ", pairKey("USDT", "RUB", "SELL") === "USDT-RUB-SELL");
+
+/* ── лимиты объявления в человеческом виде ── */
+// регресс: maxAmount = 0 значит «без максимума», но в таблице печаталось
+// «1 000 – 0 RUB» — цифра, которая читается как ошибка данных
+T("formatLimits: обычный интервал", formatLimits(1000, 50000, "RUB") === "1\u00A0000 – 50\u00A0000 RUB");
+T("formatLimits: без максимума → «от»", formatLimits(1000, 0, "RUB") === "от 1\u00A0000 RUB");
+T("formatLimits: без минимума → «до»", formatLimits(0, 5000, "RUB") === "до 5\u00A0000 RUB");
+T("formatLimits: оба нуля → без ограничений", formatLimits(0, 0, "RUB") === "без ограничений RUB");
+T("formatLimits: отрицательные считаются отсутствующими",
+  formatLimits(-5, -10, "RUB") === "без ограничений RUB");
+T("formatLimits: null → без ограничений", formatLimits(null, null, "USD") === "без ограничений USD");
+T("formatLimits: NaN игнорируется", formatLimits(NaN, 5000, "RUB") === "до 5\u00A0000 RUB");
 
 /* ── списки валют: только то, что принимает боевой API ── */
 // регресс: USDC/BNB и AED стояли в списках, но API отвечает на них 400

@@ -27,6 +27,13 @@ import {
 const CODE_PREFIX = "WALT1:";
 const DC_LABEL = "walt-p2p-terminal";
 const PING_INTERVAL_MS = 10_000;
+/**
+ * Сколько ждём код ответа, прежде чем закрыть приглашение.
+ *
+ * Пять минут — компромисс: напарник успевает прочитать сообщение и ответить,
+ * но брошенные вкладки не копят открытые RTCPeerConnection.
+ */
+const INVITE_TTL_MS = 5 * 60_000;
 const MAX_LOG = 30;
 
 const RTC_CONFIG: RTCConfiguration = {
@@ -157,6 +164,8 @@ interface PeerConn {
   rttMs: number | null;
   pings: Map<string, number>;
   pingTimer: ReturnType<typeof setInterval> | null;
+  /** таймер закрытия брошенного приглашения (только для pending) */
+  pendingTimer?: ReturnType<typeof setTimeout> | null;
   saidHello: boolean;
 }
 
@@ -246,11 +255,20 @@ class PeerNetwork {
 
   /* ---------------------------- сигналинг --------------------------- */
 
-  /** Шаг 1 (инициатор): создать код приглашения */
+  /**
+   * Создать код приглашения (шаг 1).
+   *
+   * Незавершённые приглашения закрываются не только при создании нового:
+   * пользователь мог открыть код, отправить напарнику и уйти со страницы, так
+   * и не получив ответ. RTCPeerConnection при этом оставался живым вместе с
+   * ICE-агентом и открытым сокетом STUN — на каждое такое приглашение. Таймер
+   * закрывает брошенные приглашения через INVITE_TTL_MS.
+   */
   async createInvite(): Promise<{ inviteId: string; code: string }> {
     if (!this.supported) throw new Error("Браузер не поддерживает WebRTC");
     // закрываем незавершённые прошлые приглашения — иначе RTCPeerConnection утекают
     for (const old of this.pending.values()) {
+      this.clearPendingTimer(old);
       try {
         old.pc.close();
       } catch {
@@ -275,6 +293,7 @@ class PeerNetwork {
     };
     this.pending.set(inviteId, conn);
     this.bindConnection(conn);
+    this.armPendingTimer(conn);
 
     const dc = pc.createDataChannel(DC_LABEL, { ordered: true });
     this.bindChannel(conn, dc);
@@ -359,6 +378,37 @@ class PeerNetwork {
 
   /* ------------------------- внутреннее ----------------------------- */
 
+  /**
+   * Таймер жизни приглашения.
+   *
+   * Код приглашения живёт в мессенджере напарника: он может ответить через
+   * минуту, а может — никогда. Второй случай раньше оставлял открытое
+   * RTCPeerConnection навсегда (ICE-агент, сокет STUN, собранные кандидаты),
+   * и после нескольких попыток браузер начинал отказывать в новых соединениях.
+   */
+  private armPendingTimer(conn: PeerConn): void {
+    this.clearPendingTimer(conn);
+    conn.pendingTimer = setTimeout(() => {
+      conn.pendingTimer = null;
+      if (!this.pending.has(conn.id)) return;
+      this.addLog("Приглашение устарело — создайте новое");
+      try {
+        conn.pc.close();
+      } catch {
+        /* ignore */
+      }
+      this.pending.delete(conn.id);
+      this.notify();
+    }, INVITE_TTL_MS);
+  }
+
+  private clearPendingTimer(conn: PeerConn): void {
+    if (conn.pendingTimer) {
+      clearTimeout(conn.pendingTimer);
+      conn.pendingTimer = null;
+    }
+  }
+
   private bindConnection(conn: PeerConn): void {
     conn.pc.onconnectionstatechange = () => {
       const st = conn.pc.connectionState;
@@ -381,6 +431,7 @@ class PeerNetwork {
       conn.status = "connected";
       conn.connectedAt = Date.now();
       conn.lastSeen = Date.now();
+      this.clearPendingTimer(conn);
       this.pending.delete(conn.id);
       this.peers.set(conn.id, conn);
       this.addLog(`Соединение установлено${conn.name ? `: ${conn.name}` : ""}`);
@@ -401,6 +452,7 @@ class PeerNetwork {
   private teardown(conn: PeerConn): void {
     if (conn.pingTimer) clearInterval(conn.pingTimer);
     conn.pingTimer = null;
+    this.clearPendingTimer(conn);
     conn.status = "closed";
     try {
       conn.dc?.close();
