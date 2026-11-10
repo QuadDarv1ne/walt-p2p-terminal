@@ -9,7 +9,8 @@ import { ArrowDownRight, ArrowUpRight, Activity, Percent, TriangleAlert } from "
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { formatMoney, formatPercent, formatPrice, formatSignedPercent, timeAgo } from "@/lib/p2p/format";
+import { formatMoney, formatPercent, formatPrice, formatSignedPercent } from "@/lib/p2p/format";
+import { TimeAgo } from "@/components/p2p/time-ago";
 import { chronological } from "@/lib/p2p/forecast";
 import { useP2PStore } from "@/lib/p2p/store";
 import { P2PAd, PairQuote, pairKey } from "@/lib/p2p/types";
@@ -162,7 +163,9 @@ export function StatsCards({ quote, spreadPct, spreadInverted, bestAds, lastUpda
           <div className="mt-2 flex items-center gap-2">
             <Progress value={onlinePct} className="h-1.5" aria-label="Доля мейкеров в сети" />
           </div>
-          <div className="mt-1.5 text-[11px] text-muted-foreground">обновлено: {timeAgo(lastUpdated)}</div>
+          <div className="mt-1.5 text-[11px] text-muted-foreground">
+            обновлено: <TimeAgo ts={lastUpdated} />
+          </div>
         </CardContent>
       </Card>
     </div>

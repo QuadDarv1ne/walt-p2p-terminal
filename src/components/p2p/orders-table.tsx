@@ -41,8 +41,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { downloadCsv, formatMoney, formatPrice, timeAgo } from "@/lib/p2p/format";
-import { filterAds, parseAmount, sortAds, uniquePayments, bestAd } from "@/lib/p2p/filters";
+import { downloadCsv, formatMoney, formatPrice, copyText } from "@/lib/p2p/format";
+import { TimeAgo } from "@/components/p2p/time-ago";
+import { filterAds, parseAmount, sortAds, uniquePayments, bestAdForAmount } from "@/lib/p2p/filters";
 import { P2PAd, Side } from "@/lib/p2p/types";
 
 interface OrdersTableProps {
@@ -84,10 +85,15 @@ function copyDealInfo(ad: P2PAd, crypto: string, fiat: string) {
     `Оплата: ${ad.payments.join(", ") || "—"}`,
     `Рейтинг: ${ad.executeRate}%`,
   ].join("\n");
-  navigator.clipboard
-    .writeText(text)
-    .then(() => toast.success("Данные сделки скопированы", { description: "Совершите обмен в приложении Walt P2P Маркет" }))
-    .catch(() => toast.error("Не удалось скопировать"));
+  void copyText(text).then((ok) =>
+    ok
+      ? toast.success("Данные сделки скопированы", {
+          description: "Совершите обмен в приложении Walt P2P Маркет",
+        })
+      : toast.error("Не удалось скопировать", {
+          description: "Браузер запретил доступ к буферу обмена — скопируйте данные вручную.",
+        }),
+  );
 }
 
 export function OrdersTable({ ads, side, crypto, fiat, loading, lastUpdated, hasError, onRefresh }: OrdersTableProps) {
@@ -114,8 +120,14 @@ export function OrdersTable({ ads, side, crypto, fiat, loading, lastUpdated, has
   );
 
   // лучший курс по ВСЕМ полученным объявлениям — бейдж ставится только этой строке,
-  // на какой бы странице она ни находилась
-  const bestAdId = useMemo(() => bestAd(ads, side)?.id ?? null, [ads, side]);
+  // на какой бы странице она ни находилась.
+  // При включённом фильтре по сумме «лучшим» считается лучший курс среди объявлений,
+  // принимающих эту сумму: иначе бейдж уезжал на строку, отфильтрованную прочь,
+  // и в списке не оставалось ни одной подсвеченной цены.
+  const bestAdId = useMemo(
+    () => bestAdForAmount(ads, side, amount)?.id ?? null,
+    [ads, side, amount],
+  );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
   const safePage = Math.min(page, totalPages);
@@ -187,7 +199,7 @@ export function OrdersTable({ ads, side, crypto, fiat, loading, lastUpdated, has
             </Badge>
           )}
           <span className="ml-auto text-[11px] text-muted-foreground">
-            обновлено: {timeAgo(lastUpdated)}
+            обновлено: <TimeAgo ts={lastUpdated} />
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">

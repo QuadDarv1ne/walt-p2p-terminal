@@ -157,9 +157,15 @@ export function useP2pData() {
       addQ(st.crypto, st.fiat, "SELL", latest.sellRes);
       addQ(st.crypto, st.fiat, "BUY", latest.buyRes);
       for (const [key, q] of Object.entries(latest.extraQuotes)) {
+        // ключ собирается через pairKey (crypto-fiat-side); split("-") ломался
+        // на пользовательских кодах валют, где допустимы только латинские буквы,
+        // но исторически в сторе могли остаться старые записи — парсим с конца
         const parts = key.split("-");
-        if (parts.length !== 3) continue;
-        const [c, f, sd] = parts as [string, string, Side];
+        if (parts.length < 3) continue;
+        const sd = parts[parts.length - 1] as Side;
+        if (sd !== "SELL" && sd !== "BUY") continue;
+        const f = parts[parts.length - 2];
+        const c = parts.slice(0, parts.length - 2).join("-");
         if (st.crypto === c && st.fiat === f) continue; // уже добавили выше
         quotes.push({
           crypto: c,

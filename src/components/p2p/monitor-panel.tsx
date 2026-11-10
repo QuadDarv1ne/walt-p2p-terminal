@@ -39,7 +39,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatPrice, formatTime, timeAgo } from "@/lib/p2p/format";
+import { formatPrice, formatTime } from "@/lib/p2p/format";
+import { TimeAgo } from "@/components/p2p/time-ago";
 import { parseAmount } from "@/lib/p2p/filters";
 import { chronological } from "@/lib/p2p/forecast";
 import { useP2PStore, MAX_ALERTS, MAX_WATCH } from "@/lib/p2p/store";
@@ -203,7 +204,7 @@ function WatchSection({ extraQuotes }: { extraQuotes: Record<string, ExtraQuote>
                 </div>
                 <div className="num text-xs text-muted-foreground">
                   {q?.best ? `${formatPrice(q.best)} ${w.fiat}` : "загрузка…"}
-                  {q ? ` · обновлено ${timeAgo(q.fetchedAt)}` : ""}
+                  {q ? <> · обновлено <TimeAgo ts={q.fetchedAt} /></> : ""}
                 </div>
               </button>
               <Button
@@ -343,7 +344,12 @@ function AlertsSection({ quote }: { quote: PairQuote }) {
               </div>
               <div className="num text-xs text-muted-foreground">
                 {a.op === "above" ? "выше" : "ниже"} {formatPrice(a.target)} {a.fiat}
-                {a.lastTriggeredAt ? ` · сработал ${timeAgo(a.lastTriggeredAt)}` : ""}
+                {a.lastTriggeredAt ? (
+                  <>
+                    {" · сработал "}
+                    <TimeAgo ts={a.lastTriggeredAt} />
+                  </>
+                ) : null}
               </div>
             </div>
             <Button

@@ -26,7 +26,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { formatPrice, timeAgo } from "@/lib/p2p/format";
+import { copyText, formatPrice } from "@/lib/p2p/format";
+import { TimeAgo } from "@/components/p2p/time-ago";
 import { useP2PStore } from "@/lib/p2p/store";
 import { PeerInfo, PeerStatus } from "@/lib/p2p/types";
 import { PeerNetworkSnapshot, peerNetwork } from "@/lib/p2p/webrtc";
@@ -69,14 +70,17 @@ function CopyButton({ text, label = "Копировать" }: { text: string; la
       variant="outline"
       size="sm"
       onClick={() => {
-        navigator.clipboard
-          .writeText(text)
-          .then(() => {
-            setCopied(true);
-            toast.success("Скопировано");
-            setTimeout(() => setCopied(false), 1500);
-          })
-          .catch(() => toast.error("Не удалось скопировать"));
+        void copyText(text).then((ok) => {
+          if (!ok) {
+            toast.error("Не удалось скопировать", {
+              description: "Выделите код в поле и скопируйте вручную (Ctrl+C).",
+            });
+            return;
+          }
+          setCopied(true);
+          toast.success("Скопировано");
+          setTimeout(() => setCopied(false), 1500);
+        });
       }}
     >
       {copied ? <Check className="mr-1.5 h-4 w-4 text-emerald-500" /> : <Copy className="mr-1.5 h-4 w-4" />}
@@ -418,7 +422,7 @@ export function PeerNetworkCard() {
                         </Badge>
                       </div>
                       <div className="text-[11px] text-muted-foreground">
-                        от {q.from} · {timeAgo(q.receivedAt)} · {q.onlineCount}/{q.totalCount} в сети
+                        от {q.from} · <TimeAgo ts={q.receivedAt} /> · {q.onlineCount}/{q.totalCount} в сети
                       </div>
                     </div>
                     <div className="num shrink-0 text-sm font-semibold">

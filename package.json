@@ -10,8 +10,8 @@
   "license": "CC-BY-SA-4.0",
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
-    "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
-    "build:static": "NEXT_OUTPUT=export next build && echo 'Статический экспорт готов: out/'",
+    "build": "bun scripts/build.ts",
+    "build:static": "bun scripts/build.ts --static",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "eslint .",
     "test": "bun scripts/test-logic.ts"

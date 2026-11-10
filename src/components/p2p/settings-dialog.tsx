@@ -57,7 +57,8 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchAds } from "@/lib/p2p/api";
-import { useP2PStore } from "@/lib/p2p/store";
+import { pruneHistory } from "@/lib/p2p/history";
+import { useP2PStore, MAX_REFRESH_SEC, MIN_REFRESH_SEC, PAGE_SIZES } from "@/lib/p2p/store";
 import { ConnMode, HistoryPoint, Side } from "@/lib/p2p/types";
 
 interface SettingsDialogProps {
@@ -220,8 +221,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         st.mergeAlerts(data.alerts as never);
       }
       if (data.history && typeof data.history === "object") {
+        // чужой файл может содержать сотни пар по 240 точек — без pruneHistory
+        // это переполняло квоту localStorage и ломало сохранение всего состояния
         useP2PStore.setState((s) => ({
-          history: { ...s.history, ...(data.history as Record<string, HistoryPoint[]>) },
+          history: pruneHistory({
+            ...s.history,
+            ...(data.history as Record<string, HistoryPoint[]>),
+          }),
         }));
       }
       if (data.settings && typeof data.settings === "object") {
@@ -422,8 +428,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             <Slider
               value={[refreshSec]}
               onValueChange={([v]) => setRefreshSec(v)}
-              min={10}
-              max={120}
+              min={MIN_REFRESH_SEC}
+              max={MAX_REFRESH_SEC}
               step={5}
               aria-label="Интервал автообновления в секундах"
             />
@@ -440,9 +446,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="20">20</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
+                  {PAGE_SIZES.map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

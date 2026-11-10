@@ -62,16 +62,56 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Max-Age": "86400",
 };
 
+/**
+ * Разрешённые Origin.
+ *
+ * Релей слушает localhost и подставляет серверный API-ключ из .env, если браузер
+ * свой не прислал. Если отражать в `Access-Control-Allow-Origin` любой Origin,
+ * любая открытая в браузере страница (реклама, фишинг) может обратиться к
+ * http://localhost:8765 и бесплатно пользоваться вашим ключом к P2P API —
+ * классическая атака через localhost-сервис (DNS rebinding / drive-by).
+ * Поэтому по умолчанию разрешены только локальные адреса терминала.
+ *
+ * Дополнительные источники (например, терминал на GitHub Pages) добавляются
+ * явно: RELAY_ALLOWED_ORIGINS="https://user.github.io,https://terminal.example".
+ */
+const LOCAL_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+const EXTRA_ORIGINS = (process.env.RELAY_ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function isAllowedOrigin(origin: string): boolean {
+  if (!origin) return true; // запросы без Origin (curl, health-check) не из браузера
+  if (LOCAL_ORIGIN_RE.test(origin)) return true;
+  return EXTRA_ORIGINS.includes(origin);
+}
+
 const server = Bun.serve({
   port: PORT,
   hostname: "127.0.0.1",
   async fetch(req) {
-    const origin = req.headers.get("origin") ?? "*";
-    const allow = { ...corsHeaders, "Access-Control-Allow-Origin": origin || "*" };
+    const origin = req.headers.get("origin") ?? "";
+    const allow = isAllowedOrigin(origin)
+      ? { ...corsHeaders, "Access-Control-Allow-Origin": origin || "*" }
+      : null;
 
     // CORS preflight
     if (req.method === "OPTIONS") {
+      if (!allow) return new Response(null, { status: 403 });
       return new Response(null, { status: 204, headers: allow });
+    }
+
+    // чужой Origin: не отдаём ни данные, ни ключ
+    if (!allow) {
+      return new Response(
+        JSON.stringify({
+          error: "Origin не разрешён для локального релея",
+          hint: "Добавьте адрес терминала в RELAY_ALLOWED_ORIGINS при запуске релея.",
+          origin,
+        }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
     }
 
     // health-check для диагностики

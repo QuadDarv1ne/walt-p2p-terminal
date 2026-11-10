@@ -24,6 +24,31 @@ import {
 export const MAX_WATCH = 8;
 export const MAX_ALERTS = 12;
 
+/**
+ * Допустимые границы интервала автообновления и размера страницы.
+ *
+ * Раньше значения из localStorage и из импортированного JSON принимались как
+ * есть. Повреждённое состояние или чужой файл с `refreshSec: 0` превращали
+ * обратный отсчёт в «всегда пора обновляться»: вкладка начинала опрашивать API
+ * каждую секунду, получала HTTP 429 и тратила лимит ключа. Теперь любое
+ * значение вне диапазона приводится к ближайшей границе.
+ */
+export const MIN_REFRESH_SEC = 10;
+export const MAX_REFRESH_SEC = 120;
+export const PAGE_SIZES = [20, 50, 100] as const;
+
+export function clampRefreshSec(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 30;
+  return Math.min(MAX_REFRESH_SEC, Math.max(MIN_REFRESH_SEC, Math.round(n)));
+}
+
+export function clampPageSize(value: unknown): number {
+  const n = Number(value);
+  // только из списка допустимых: произвольное число API всё равно не примет
+  return (PAGE_SIZES as readonly number[]).includes(n) ? n : 50;
+}
+
 interface P2PSettings {
   mode: ConnMode;
   apiKey: string;
@@ -92,7 +117,14 @@ export const useP2PStore = create<P2PState>()(
       history: {},
 
       patchSettings: (patch) =>
-        set((s) => ({ settings: { ...s.settings, ...patch } })),
+        set((s) => {
+          const next = { ...s.settings, ...patch };
+          // границы применяются на входе: и слайдер, и импорт, и синхронизация
+          // вкладок проходят через этот же метод
+          if (patch.refreshSec !== undefined) next.refreshSec = clampRefreshSec(patch.refreshSec);
+          if (patch.pageSize !== undefined) next.pageSize = clampPageSize(patch.pageSize);
+          return { settings: next };
+        }),
 
       setPair: (crypto, fiat) => set({ crypto, fiat }),
       setSide: (side) => set({ side }),
@@ -148,21 +180,27 @@ export const useP2PStore = create<P2PState>()(
       clearHistory: () => set({ history: {} }),
 
       applySyncState: (remote) =>
-        set((s) => ({
-          crypto: remote.crypto || s.crypto,
-          fiat: remote.fiat || s.fiat,
-          side: remote.side || s.side,
-          watchlist: remote.watchlist ?? s.watchlist,
-          alerts: remote.alerts ?? s.alerts,
-          history: remote.history ?? s.history,
-          settings: {
-            ...s.settings,
-            ...(remote.settings ?? {}),
-            // ключ и баннер остаются локальными
-            apiKey: s.settings.apiKey,
-            demoBannerDismissed: s.settings.demoBannerDismissed,
-          },
-        })),
+        set((s) => {
+          const remoteSettings = remote.settings ?? {};
+          return {
+            crypto: remote.crypto || s.crypto,
+            fiat: remote.fiat || s.fiat,
+            side: remote.side || s.side,
+            watchlist: remote.watchlist ?? s.watchlist,
+            alerts: remote.alerts ?? s.alerts,
+            history: remote.history ?? s.history,
+            settings: {
+              ...s.settings,
+              ...remoteSettings,
+              // границы соблюдаются и для данных из соседней вкладки
+              refreshSec: clampRefreshSec(remoteSettings.refreshSec ?? s.settings.refreshSec),
+              pageSize: clampPageSize(remoteSettings.pageSize ?? s.settings.pageSize),
+              // ключ и баннер остаются локальными
+              apiKey: s.settings.apiKey,
+              demoBannerDismissed: s.settings.demoBannerDismissed,
+            },
+          };
+        }),
 
       mergeWatchlist: (items) =>
         set((s) => {
@@ -244,6 +282,9 @@ export const useP2PStore = create<P2PState>()(
             st.settings.peerName = `Трейдер-${Math.floor(1000 + Math.random() * 9000)}`;
           }
           st.settings.tabSync ??= true;
+          // повреждённое состояние не должно запускать шторм запросов к API
+          st.settings.refreshSec = clampRefreshSec(st.settings.refreshSec);
+          st.settings.pageSize = clampPageSize(st.settings.pageSize);
         }
         return st as P2PState;
       },

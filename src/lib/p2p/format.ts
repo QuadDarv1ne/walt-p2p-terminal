@@ -43,7 +43,9 @@ export function timeAgo(ts: number | null | undefined): string {
   const min = Math.floor(sec / 60);
   if (min < 60) return `${min} мин назад`;
   const hours = Math.floor(min / 60);
-  return `${hours} ч назад`;
+  if (hours < 24) return `${hours} ч назад`;
+  const days = Math.floor(hours / 24);
+  return `${days} дн назад`;
 }
 
 export function formatTime(ts: number): string {
@@ -54,23 +56,75 @@ export function formatTime(ts: number): string {
   });
 }
 
+/**
+ * Экранирование одной ячейки CSV.
+ *
+ * Разделитель — «;», поэтому ячейку с точкой с запятой, кавычкой или переводом
+ * строки нужно заключать в кавычки, а не «чинить» заменой символа: раньше
+ * `;` внутри значения превращался в `,` и данные тихо искажались (список
+ * способов оплаты «Сбербанк; Т-Банк» уезжал в файл как «Сбербанк, Т-Банк»).
+ */
+function csvCell(cell: string | number): string {
+  if (typeof cell === "number") {
+    // Excel с русской локалью ждёт десятичную запятую
+    return String(cell).replace(".", ",");
+  }
+  const s = String(cell);
+  return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Копирование в буфер обмена с внятным результатом.
+ *
+ * `navigator.clipboard` существует только в безопасном контексте: при открытии
+ * терминала по IP локальной сети (http://192.168.x.x) его нет вовсе, и прямой
+ * вызов `navigator.clipboard.writeText(...)` бросал TypeError прямо в обработчике
+ * клика — пользователь не получал ни копии, ни объяснения. Здесь пробуем
+ * современный API, затем старый execCommand, и честно возвращаем false.
+ */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* нет разрешения или API недоступен — пробуем fallback */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    // вне экрана, но всё ещё фокусируемый: иначе selection не создаётся
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Экспорт массива объектов в CSV (Excel-совместимый, разделитель «;», десятичная запятая) */
 export function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]): void {
-  const escapeCell = (cell: string | number) => {
-    const s = String(cell).replace(/;/g, ",");
-    return /["\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const toCell = (cell: string | number) =>
-    typeof cell === "number" ? String(cell).replace(".", ",") : escapeCell(cell);
-
-  const lines = [headers.map(toCell).join(";"), ...rows.map((r) => r.map(toCell).join(";"))];
+  const lines = [headers.map(csvCell).join(";"), ...rows.map((r) => r.map(csvCell).join(";"))];
+  // BOM нужен, иначе Excel открывает кириллицу как mojibake
   const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  // Firefox игнорирует click() у ссылки, которой нет в документе
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  // отзывать URL сразу нельзя: браузер ещё не начал скачивание и получит пустой файл
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function uid(): string {

@@ -6,7 +6,7 @@
  * Запуск: bun scripts/test-logic.ts
  */
 import { bestPrice, demoAds, demoMidPrice, normalizeAd, buildRequestUrl, P2P_API_URL, describeApiError } from "../src/lib/p2p/api";
-import { filterAds, fitsAmount, isInverted, parseAmount, sanitizeCode, sortAds, spreadPercent, uniquePayments, bestAd } from "../src/lib/p2p/filters";
+import { filterAds, fitsAmount, isInverted, parseAmount, sanitizeCode, sortAds, spreadPercent, uniquePayments, bestAd, bestAdForAmount } from "../src/lib/p2p/filters";
 import { formatMoney, formatPercent, formatPrice } from "../src/lib/p2p/format";
 import {
   HISTORY_LIMIT,
@@ -15,6 +15,7 @@ import {
   pruneHistory,
 } from "../src/lib/p2p/history";
 import { CRYPTOS, FIATS, FIAT_LABEL, pairKey } from "../src/lib/p2p/types";
+import { MAX_REFRESH_SEC, MIN_REFRESH_SEC, PAGE_SIZES, clampPageSize, clampRefreshSec } from "../src/lib/p2p/store";
 import {
   MAX_HORIZON_MINUTES,
   MIN_POINTS_FOR_FORECAST,
@@ -161,6 +162,21 @@ T("bestPrice = bestAd: мусорная цена не побеждает", bestP
 T("bestPrice = bestAd: только мусор → null", bestPrice([ad({ price: 0 }), ad({ price: -1 })], "SELL") === null);
 T("bestPrice = bestAd: NaN игнорируется", bestPrice([ad({ price: NaN }), ad({ price: 5 })], "SELL") === 5);
 T("bestPrice = bestAd: BUY берёт максимум", bestPrice(sellAds, "BUY") === bestAd(sellAds, "BUY")?.price);
+
+/* ── лучший курс с учётом суммы сделки (подсветка в отфильтрованной таблице) ── */
+// регресс: при инверсии лучший курс держится объявлением с узким лимитом.
+// Если пользователь задал сумму, этот лидер отфильтрован — бейдж «лучший курс»
+// исчезал из таблицы, и подсвеченной строки не оставалось вовсе.
+const narrow = [
+  ad({ id: "narrow", price: 90, minAmount: 4999, maxAmount: 5000 }),
+  ad({ id: "wide", price: 93, minAmount: 1000, maxAmount: 100000 }),
+  ad({ id: "wide2", price: 95, minAmount: 1000, maxAmount: 100000 }),
+];
+T("bestAdForAmount: null → как bestAd (узкий лидер)", bestAdForAmount(narrow, "SELL", null)?.id === "narrow");
+T("bestAdForAmount: сумма 50 000 → лучший среди доступных", bestAdForAmount(narrow, "SELL", 50_000)?.id === "wide");
+T("bestAdForAmount: сумма 4 999 → узкий лидер снова доступен", bestAdForAmount(narrow, "SELL", 4999)?.id === "narrow");
+T("bestAdForAmount: ни одно не подходит → null", bestAdForAmount(narrow, "SELL", 10) === null);
+T("bestAdForAmount: BUY берёт максимум среди доступных", bestAdForAmount(narrow, "BUY", 50_000)?.id === "wide2");
 
 /* ── сортировка ── */
 const S = [ad({ id: "a", price: 10 }), ad({ id: "b", price: 2 }), ad({ id: "c", price: 0 }), ad({ id: "d", price: 1 })];
@@ -392,6 +408,25 @@ T("MAX_HORIZON_MINUTES: два часа", MAX_HORIZON_MINUTES === 120);
 // потолок по времени, а не по шагам: иначе при быстром автообновлении
 // все подписи горизонтов слились бы в одну
 T("MAX_HORIZON_MINUTES: в шагах по 30 с это 240", (MAX_HORIZON_MINUTES * 60_000) / 30_000 === 240);
+
+/* ── границы настроек: защита от шторма запросов ── */
+// регресс: повреждённый localStorage или чужой файл экспорта с refreshSec: 0
+// превращали обратный отсчёт в «всегда пора обновляться» — вкладка опрашивала
+// API каждую секунду и получала HTTP 429
+T("настройки: MIN_REFRESH_SEC = 10", MIN_REFRESH_SEC === 10);
+T("настройки: MAX_REFRESH_SEC = 120", MAX_REFRESH_SEC === 120);
+T("настройки: PAGE_SIZES только допустимые", eq([...PAGE_SIZES], [20, 50, 100]));
+T("clampRefreshSec: 0 → минимум", clampRefreshSec(0) === MIN_REFRESH_SEC);
+T("clampRefreshSec: отрицательное → минимум", clampRefreshSec(-30) === MIN_REFRESH_SEC);
+T("clampRefreshSec: 9999 → максимум", clampRefreshSec(9999) === MAX_REFRESH_SEC);
+T("clampRefreshSec: NaN → 30", clampRefreshSec(Number.NaN) === 30);
+T("clampRefreshSec: строка «45» → 45", clampRefreshSec("45") === 45);
+T("clampRefreshSec: дробное округляется", clampRefreshSec(31.7) === 32);
+T("clampRefreshSec: значение в диапазоне не меняется", clampRefreshSec(60) === 60);
+T("clampPageSize: 7 → 50", clampPageSize(7) === 50);
+T("clampPageSize: 20/50/100 сохраняются",
+  clampPageSize(20) === 20 && clampPageSize(50) === 50 && clampPageSize(100) === 100);
+T("clampPageSize: строка «20» → 20", clampPageSize("20") === 20);
 
 /* ── forecastInterval: не-отрицательная нижняя граница ── */
 // линейный ряд: нижняя граница всегда ≥ 0
