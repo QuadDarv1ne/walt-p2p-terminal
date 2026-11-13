@@ -5,6 +5,7 @@
  * Автотесты чистой логики Walt P2P Терминала (пользовательские сценарии).
  * Запуск: bun scripts/test-logic.ts
  */
+import "./shim-storage";
 import { bestPrice, demoAds, demoMidPrice, normalizeAd, buildRequestUrl, P2P_API_URL, describeApiError } from "../src/lib/p2p/api";
 import { filterAds, fitsAmount, isInverted, parseAmount, sanitizeCode, sortAds, spreadPercent, uniquePayments, bestAd, bestAdForAmount } from "../src/lib/p2p/filters";
 import { formatLimits, formatMoney, formatPercent, formatPrice } from "../src/lib/p2p/format";
@@ -15,7 +16,16 @@ import {
   pruneHistory,
 } from "../src/lib/p2p/history";
 import { CRYPTOS, FIATS, FIAT_LABEL, pairKey } from "../src/lib/p2p/types";
-import { MAX_REFRESH_SEC, MIN_REFRESH_SEC, PAGE_SIZES, clampPageSize, clampRefreshSec } from "../src/lib/p2p/store";
+import {
+  MAX_ALERTS,
+  MAX_REFRESH_SEC,
+  MAX_WATCH,
+  MIN_REFRESH_SEC,
+  PAGE_SIZES,
+  clampPageSize,
+  clampRefreshSec,
+  useP2PStore,
+} from "../src/lib/p2p/store";
 import {
   MAX_HORIZON_MINUTES,
   MIN_POINTS_FOR_FORECAST,
@@ -465,6 +475,120 @@ T("forecast: high никогда не меньше low", ivLong.high >= ivLong.l
 const crash = Array.from({ length: 12 }, (_, i) => ({ t: F0 + i * 30_000, best: 3000 - i * 280 }));
 const crashIv = forecastInterval(fitTrend(crash)!, 240);
 T("forecast: при обвале low ≥ 0 и high ≥ low", crashIv.low >= 0 && crashIv.high >= crashIv.low);
+
+/* ── списки стора: лимиты, дубли и приоритет локальных ── */
+// Интеграционные проверки самого стора: раньше слияние с данными пира
+// работало как «новые поверх старых» и обрезало хвост, из-за чего у
+// пользователя исчезали его собственные избранное и алерты.
+const store = useP2PStore.getState;
+const watchItem = (i: number, crypto = "USDT", side: "SELL" | "BUY" = "SELL") => ({
+  id: `w${i}`,
+  crypto,
+  fiat: "RUB",
+  side,
+});
+const alertRule = (i: number, target = 90 + i) => ({
+  id: `a${i}`,
+  crypto: "USDT",
+  fiat: "RUB",
+  side: "SELL" as const,
+  op: "above" as const,
+  target,
+  active: true,
+});
+
+function resetLists() {
+  useP2PStore.setState({ watchlist: [], alerts: [] });
+}
+
+resetLists();
+for (let i = 0; i < MAX_WATCH + 4; i++) {
+  useP2PStore.getState().toggleWatch(`C${i}`, "RUB", "SELL");
+}
+T("watchlist: рост ограничен MAX_WATCH", store().watchlist.length === MAX_WATCH);
+T("watchlist: новые добавляются в начало", store().watchlist[0].crypto === `C${MAX_WATCH + 3}`);
+
+resetLists();
+useP2PStore.setState({
+  watchlist: Array.from({ length: MAX_WATCH }, (_, i) => watchItem(i, `L${i}`)),
+});
+store().mergeWatchlist([watchItem(100, "BTC"), watchItem(101, "ETH")]);
+// список полон: пиру отказываем, но свои не теряем (раньше срез по началу
+// массива оставлял чужие пары, а последние локальные исчезали)
+T("mergeWatchlist: локальные не вытеснены", store().watchlist[0].crypto === "L0");
+T("mergeWatchlist: все локальные на месте",
+  store().watchlist.every((w) => w.crypto.startsWith("L")));
+T("mergeWatchlist: лимит соблюдён", store().watchlist.length === MAX_WATCH);
+
+resetLists();
+useP2PStore.setState({
+  watchlist: Array.from({ length: MAX_WATCH - 2 }, (_, i) => watchItem(i, `L${i}`)),
+});
+store().mergeWatchlist([watchItem(100, "BTC"), watchItem(101, "ETH")]);
+T("mergeWatchlist: при свободных местах чужие добавлены",
+  store().watchlist.length === MAX_WATCH && store().watchlist.at(-1)?.crypto === "ETH");
+T("mergeWatchlist: локальные и чужие на месте",
+  store().watchlist.some((w) => w.crypto === "L0") &&
+  store().watchlist.some((w) => w.crypto === "BTC"));
+
+resetLists();
+useP2PStore.setState({ watchlist: [watchItem(1, "BTC"), watchItem(2, "BTC", "BUY")] });
+store().mergeWatchlist([watchItem(3, "BTC"), watchItem(4, "TON")]);
+T("mergeWatchlist: дубликат пары не добавлен",
+  store().watchlist.filter((w) => w.crypto === "BTC" && w.side === "SELL").length === 1);
+T("mergeWatchlist: новая пара добавлена", store().watchlist.some((w) => w.crypto === "TON"));
+store().mergeWatchlist([
+  null as never,
+  { crypto: "", fiat: "RUB", side: "SELL" } as never,
+  { crypto: "X", fiat: "RUB", side: "NOPE" } as never,
+]);
+T("mergeWatchlist: мусор и неверная сторона отсеяны", store().watchlist.length === 3);
+
+resetLists();
+const created = store().addAlert({ crypto: "USDT", fiat: "RUB", side: "SELL", op: "above", target: 95 });
+T("addAlert: возвращает true при создании", created === true);
+const dup = store().addAlert({ crypto: "USDT", fiat: "RUB", side: "SELL", op: "above", target: 95 });
+T("addAlert: дубликат → false", dup === false);
+T("addAlert: дубликат не добавлен", store().alerts.length === 1);
+const otherOp = store().addAlert({ crypto: "USDT", fiat: "RUB", side: "SELL", op: "below", target: 95 });
+T("addAlert: другой оператор — новое правило", otherOp === true && store().alerts.length === 2);
+const otherTarget = store().addAlert({ crypto: "USDT", fiat: "RUB", side: "SELL", op: "above", target: 96 });
+T("addAlert: другая цель — новое правило", otherTarget === true && store().alerts.length === 3);
+
+resetLists();
+for (let i = 0; i < MAX_ALERTS + 5; i++) {
+  store().addAlert({ crypto: `C${i}`, fiat: "RUB", side: "SELL", op: "above", target: 100 + i });
+}
+T("alerts: рост ограничен MAX_ALERTS", store().alerts.length === MAX_ALERTS);
+T("alerts: лимит не превышается повторным вызовом",
+  store().addAlert({ crypto: "ZZ", fiat: "RUB", side: "SELL", op: "above", target: 999 }) === false);
+
+resetLists();
+useP2PStore.setState({
+  alerts: Array.from({ length: MAX_ALERTS }, (_, i) => alertRule(i, 200 + i)),
+});
+store().mergeAlerts([alertRule(50, 700), alertRule(51, 701)]);
+T("mergeAlerts: локальные приоритетнее чужих", store().alerts[0].target === 200);
+T("mergeAlerts: лимит соблюдён", store().alerts.length === MAX_ALERTS);
+T("mergeAlerts: чужие не вытеснули свои", store().alerts.filter((a) => a.target === 200).length === 1);
+
+resetLists();
+useP2PStore.setState({ alerts: [alertRule(1, 95)] });
+store().mergeAlerts([alertRule(2, 95), alertRule(3, 120)]);
+T("mergeAlerts: дубликат правила не добавлен",
+  store().alerts.filter((a) => a.target === 95).length === 1);
+T("mergeAlerts: новое правило добавлено неактивным",
+  store().alerts.some((a) => a.target === 120 && a.active === false));
+T("mergeAlerts: id не копируются от пира",
+  new Set(store().alerts.map((a) => a.id)).size === store().alerts.length);
+store().mergeAlerts([
+  null as never,
+  { crypto: "", fiat: "RUB", side: "SELL", op: "above", target: 1 } as never,
+  { crypto: "X", fiat: "RUB", side: "SELL", op: "above", target: 0 } as never,
+  { crypto: "X", fiat: "RUB", side: "SELL", op: "above", target: NaN } as never,
+]);
+T("mergeAlerts: мусор и нулевая цель отсеяны", store().alerts.length === 2);
+resetLists();
 
 console.log(`\nИТОГО: PASS ${passed} / FAIL ${failed}`);
 if (failures.length) {

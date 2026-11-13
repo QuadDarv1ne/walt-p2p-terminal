@@ -250,7 +250,15 @@ function AlertsSection({ quote }: { quote: PairQuote }) {
       });
       return;
     }
-    addAlert({ crypto, fiat, side, op, target: value });
+    const created = addAlert({ crypto, fiat, side, op, target: value });
+    if (!created) {
+      // правило с такими же параметрами уже есть — повторный клик не должен
+      // обещать «Алерт создан» и заставлять думать, что правил два
+      toast.info("Такое правило уже существует", {
+        description: `${crypto}/${fiat} · ${op === "above" ? "выше" : "ниже"} ${formatPrice(value)} ${fiat}`,
+      });
+      return;
+    }
     toast.success("Алерт создан", {
       description: `${crypto}/${fiat} · ${op === "above" ? "выше" : "ниже"} ${formatPrice(value)} ${fiat}`,
     });

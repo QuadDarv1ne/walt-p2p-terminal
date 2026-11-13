@@ -77,7 +77,12 @@ interface P2PState {
   setSide: (side: Side) => void;
   toggleWatch: (crypto: string, fiat: string, side: Side) => void;
   removeWatch: (id: string) => void;
-  addAlert: (rule: Omit<AlertRule, "id" | "active">) => void;
+  /**
+   * Добавляет правило. Возвращает false, если алерт не создан — достигнут
+   * лимит или такое правило уже есть. Интерфейс обязан показать причину,
+   * а не рапортовать об успехе.
+   */
+  addAlert: (rule: Omit<AlertRule, "id" | "active">) => boolean;
   toggleAlert: (id: string) => void;
   touchAlert: (id: string, at: number) => void;
   removeAlert: (id: string) => void;
@@ -147,12 +152,20 @@ export const useP2PStore = create<P2PState>()(
       removeWatch: (id) =>
         set((s) => ({ watchlist: s.watchlist.filter((w) => w.id !== id) })),
 
-      addAlert: (rule) =>
-        set((s) => {
-          if (s.alerts.length >= MAX_ALERTS) return s;
-          const alert: AlertRule = { ...rule, id: uid(), active: true };
-          return { alerts: [alert, ...s.alerts] };
-        }),
+      addAlert: (rule) => {
+        const current = get().alerts;
+        if (current.length >= MAX_ALERTS) return false;
+        const key = pairKey(rule.crypto, rule.fiat, rule.side) + rule.op + rule.target;
+        // повторный клик с теми же параметрами создавал второй такой же алерт:
+        // он срабатывал дважды и присылал два одинаковых уведомления
+        const exists = current.some(
+          (a) => pairKey(a.crypto, a.fiat, a.side) + a.op + a.target === key,
+        );
+        if (exists) return false;
+        const alert: AlertRule = { ...rule, id: uid(), active: true };
+        set({ alerts: [alert, ...current] });
+        return true;
+      },
 
       toggleAlert: (id) =>
         set((s) => ({
@@ -213,7 +226,9 @@ export const useP2PStore = create<P2PState>()(
               !seen.has(pairKey(w.crypto, w.fiat, w.side)),
           );
           if (!add.length) return s;
-          return { watchlist: [...add, ...s.watchlist].slice(0, MAX_WATCH) };
+          // локальные элементы приоритетнее: сначала старые, потом новые;
+          // при превышении лимита обрезаем с конца — отбрасываем новые, а не старые
+          return { watchlist: [...s.watchlist, ...add].slice(0, MAX_WATCH) };
         }),
 
       mergeAlerts: (items) =>
@@ -230,12 +245,14 @@ export const useP2PStore = create<P2PState>()(
             )
             .map((a) => ({
               ...a,
-              id: Math.random().toString(36).slice(2, 10),
+              id: uid(),
               active: false,
               lastTriggeredAt: undefined,
             }));
           if (!add.length) return s;
-          return { alerts: [...add, ...s.alerts].slice(0, MAX_ALERTS) };
+          // локальные приоритетнее: сначала старые, потом новые;
+          // при превышении лимита обрезаем с конца — отбрасываем новые, а не старые
+          return { alerts: [...s.alerts, ...add].slice(0, MAX_ALERTS) };
         }),
 
       resetAll: () =>
