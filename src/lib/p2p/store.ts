@@ -91,10 +91,17 @@ interface P2PState {
   clearHistory: () => void;
   /** применить состояние, пришедшее из другой вкладки (BroadcastChannel) */
   applySyncState: (state: SyncStatePayload) => void;
-  /** добавить избранное, полученное от пира по WebRTC (без дублей) */
-  mergeWatchlist: (items: WatchItem[]) => void;
-  /** объединить алерты, полученные от пира (без дублей) */
-  mergeAlerts: (items: AlertRule[]) => void;
+  /**
+   * Добавить избранное, полученное от пира по WebRTC (без дублей).
+   * Возвращает число реально добавленных элементов: интерфейс обязан
+   * показать «ничего не добавлено», а не рапортовать об успехе.
+   */
+  mergeWatchlist: (items: readonly Partial<WatchItem>[]) => number;
+  /**
+   * Объединить алерты, полученные от пира (без дублей).
+   * Возвращает число реально добавленных элементов.
+   */
+  mergeAlerts: (items: readonly Partial<AlertRule>[]) => number;
   /** сбросить историю, списки и настройки (кроме apiKey) */
   resetAll: () => void;
 }
@@ -215,45 +222,60 @@ export const useP2PStore = create<P2PState>()(
           };
         }),
 
-      mergeWatchlist: (items) =>
-        set((s) => {
-          const seen = new Set(
-            s.watchlist.map((w) => pairKey(w.crypto, w.fiat, w.side)),
-          );
-          const add = items.filter(
-            (w) =>
-              w && w.crypto && w.fiat && (w.side === "SELL" || w.side === "BUY") &&
-              !seen.has(pairKey(w.crypto, w.fiat, w.side)),
-          );
-          if (!add.length) return s;
-          // локальные элементы приоритетнее: сначала старые, потом новые;
-          // при превышении лимита обрезаем с конца — отбрасываем новые, а не старые
-          return { watchlist: [...s.watchlist, ...add].slice(0, MAX_WATCH) };
-        }),
+      mergeWatchlist: (items) => {
+        const s = get();
+        const seen = new Set(
+          s.watchlist.map((w) => pairKey(w.crypto, w.fiat, w.side)),
+        );
+        const add: WatchItem[] = [];
+        for (const raw of items) {
+          const w = raw as Partial<WatchItem> | null | undefined;
+          if (!w || typeof w !== "object") continue;
+          if (!w.crypto || !w.fiat || (w.side !== "SELL" && w.side !== "BUY")) continue;
+          const key = pairKey(w.crypto, w.fiat, w.side);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          add.push({ id: uid(), crypto: w.crypto, fiat: w.fiat, side: w.side });
+        }
+        if (!add.length) return 0;
+        // локальные элементы приоритетнее: сначала старые, потом новые;
+        // при превышении лимита обрезаем с конца — отбрасываем новые, а не старые
+        set((st) => ({ watchlist: [...st.watchlist, ...add].slice(0, MAX_WATCH) }));
+        return add.length;
+      },
 
-      mergeAlerts: (items) =>
-        set((s) => {
-          const seen = new Set(
-            s.alerts.map((a) => pairKey(a.crypto, a.fiat, a.side) + a.op + a.target),
-          );
-          const add = items
-            .filter(
-              (a) =>
-                a && a.crypto && a.fiat && (a.side === "SELL" || a.side === "BUY") &&
-                Number.isFinite(a.target) && a.target > 0 &&
-                !seen.has(pairKey(a.crypto, a.fiat, a.side) + a.op + a.target),
-            )
-            .map((a) => ({
-              ...a,
-              id: uid(),
-              active: false,
-              lastTriggeredAt: undefined,
-            }));
-          if (!add.length) return s;
-          // локальные приоритетнее: сначала старые, потом новые;
-          // при превышении лимита обрезаем с конца — отбрасываем новые, а не старые
-          return { alerts: [...s.alerts, ...add].slice(0, MAX_ALERTS) };
-        }),
+      mergeAlerts: (items) => {
+        const s = get();
+        const seen = new Set(
+          s.alerts.map((a) => pairKey(a.crypto, a.fiat, a.side) + a.op + a.target),
+        );
+        const add: AlertRule[] = [];
+        for (const raw of items) {
+          const a = raw as Partial<AlertRule> | null | undefined;
+          if (!a || typeof a !== "object") continue;
+          if (!a.crypto || !a.fiat || (a.side !== "SELL" && a.side !== "BUY")) continue;
+          if (a.op !== "above" && a.op !== "below") continue;
+          if (!Number.isFinite(a.target) || (a.target as number) <= 0) continue;
+          const key = pairKey(a.crypto, a.fiat, a.side) + a.op + a.target;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          add.push({
+            id: uid(),
+            crypto: a.crypto,
+            fiat: a.fiat,
+            side: a.side,
+            op: a.op,
+            target: a.target as number,
+            active: false,
+            lastTriggeredAt: undefined,
+          });
+        }
+        if (!add.length) return 0;
+        // локальные приоритетнее: сначала старые, потом новые;
+        // при превышении лимита обрезаем с конца — отбрасываем новые, а не старые
+        set((st) => ({ alerts: [...st.alerts, ...add].slice(0, MAX_ALERTS) }));
+        return add.length;
+      },
 
       resetAll: () =>
         set((s) => ({

@@ -448,8 +448,14 @@ export function PeerNetworkCard() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        mergeWatchlist(inc.watchlist);
-                        toast.success(`Избранное ${inc.name} добавлено`);
+                        const added = mergeWatchlist(inc.watchlist as never);
+                        if (added) {
+                          toast.success(`Избранное ${inc.name} добавлено`);
+                        } else {
+                          toast.info("Все пары уже есть в избранном", {
+                            description: "Ничего нового не добавлено.",
+                          });
+                        }
                       }}
                     >
                       Взять пары
@@ -460,8 +466,14 @@ export function PeerNetworkCard() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        mergeAlerts(inc.alerts);
-                        toast.success(`Алерты ${inc.name} добавлены (выключены)`);
+                        const added = mergeAlerts(inc.alerts as never);
+                        if (added) {
+                          toast.success(`Алерты ${inc.name} добавлены (выключены)`);
+                        } else {
+                          toast.info("Все алерты уже есть", {
+                            description: "Ничего нового не добавлено.",
+                          });
+                        }
                       }}
                     >
                       Взять алерты

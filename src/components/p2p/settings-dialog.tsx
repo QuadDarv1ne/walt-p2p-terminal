@@ -214,11 +214,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       const st = useP2PStore.getState();
       if (data.crypto && data.fiat) st.setPair(String(data.crypto), String(data.fiat));
       if (data.side === "SELL" || data.side === "BUY") st.setSide(data.side);
+      let addedWatch = 0;
+      let addedAlerts = 0;
       if (Array.isArray(data.watchlist)) {
-        st.mergeWatchlist(data.watchlist as never);
+        addedWatch = st.mergeWatchlist(data.watchlist);
       }
       if (Array.isArray(data.alerts)) {
-        st.mergeAlerts(data.alerts as never);
+        addedAlerts = st.mergeAlerts(data.alerts);
       }
       if (data.history && typeof data.history === "object") {
         // чужой файл может содержать сотни пар по 240 точек — без pruneHistory
@@ -243,7 +245,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           ...(typeof s.pageSize === "number" ? { pageSize: s.pageSize } : {}),
         });
       }
-      toast.success("Состояние импортировано", { description: "Списки объединены без дублей" });
+      toast.success("Состояние импортировано", {
+        description: `Пар добавлено: ${addedWatch}, алертов добавлено: ${addedAlerts} (без дублей)`,
+      });
       onOpenChange(false);
     } catch {
       toast.error("Не удалось прочитать файл");
