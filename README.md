@@ -263,11 +263,15 @@ chronological, горизонты прогноза, границы интерв�
 bun run test               # или: bun scripts/test-logic.ts
 ```
 
+Каждый push и pull request в `main` автоматически прогоняет тесты, линтер
+и проверку типов через [GitHub Actions](https://github.com/QuadDarv1ne/walt-p2p-terminal/actions).
+
 ## Структура
 
 ```
 walt-p2p-terminal/
 ├── .env-sample            # шаблон переменных окружения (копируется в .env)
+├── .github/workflows/     # CI: тесты, lint, типы на каждый push/PR
 ├── dist/                  # готовая статическая сборка (без Node)
 ├── src/
 │   ├── app/               # страница Next.js (клиентская)
