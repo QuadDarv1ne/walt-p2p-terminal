@@ -448,7 +448,7 @@ export function PeerNetworkCard() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        const added = mergeWatchlist(inc.watchlist as never);
+                        const added = mergeWatchlist(inc.watchlist);
                         if (added) {
                           toast.success(`Избранное ${inc.name} добавлено`);
                         } else {
@@ -466,7 +466,7 @@ export function PeerNetworkCard() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        const added = mergeAlerts(inc.alerts as never);
+                        const added = mergeAlerts(inc.alerts);
                         if (added) {
                           toast.success(`Алерты ${inc.name} добавлены (выключены)`);
                         } else {
